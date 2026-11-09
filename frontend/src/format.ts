@@ -45,12 +45,25 @@ export function periodRange(period: "week" | "month" | "year"): { from: string; 
   return { from: start.toISOString(), to: now.toISOString() };
 }
 
+function errorText(err: unknown): string {
+  if (typeof err === "string") {
+    return err;
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (err && typeof err === "object" && "message" in err && typeof err.message === "string") {
+    return err.message;
+  }
+  return "";
+}
+
 export function safeError(err: unknown, fallback: string): string {
-  const text = err instanceof Error ? err.message : String(err);
-  if (text.includes("tl_")) {
+  const text = errorText(err);
+  if (!text || text.includes("tl_")) {
     return fallback;
   }
-  return text.slice(0, 180) || fallback;
+  return text.slice(0, 180);
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {

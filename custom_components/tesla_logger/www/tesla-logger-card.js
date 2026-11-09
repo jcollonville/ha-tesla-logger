@@ -7023,9 +7023,12 @@ function Ar(f) {
   } else f === "month" ? r.setDate(1) : r.setMonth(0, 1);
   return r.setHours(0, 0, 0, 0), { from: r.toISOString(), to: s.toISOString() };
 }
-function Cr(f, s) {
-  const r = f instanceof Error ? f.message : String(f);
-  return r.includes("tl_") ? s : r.slice(0, 180) || s;
+function Cr(f) {
+  return typeof f == "string" ? f : f instanceof Error || f && typeof f == "object" && "message" in f && typeof f.message == "string" ? f.message : "";
+}
+function Sr(f, s) {
+  const r = Cr(f);
+  return !r || r.includes("tl_") ? s : r.slice(0, 180);
 }
 function Fe(f) {
   return !f || typeof f != "object" ? null : f;
@@ -7035,11 +7038,11 @@ function mo(f) {
   const s = Fe(f);
   return !!(s && Array.isArray(s.data));
 }
-function Sr(f) {
+function Mr(f) {
   const s = Fe(f);
   return !!(s && Array.isArray(s.route) && Array.isArray(s.series));
 }
-function Mr(f) {
+function Er(f) {
   const s = Fe(f);
   return !!(s && typeof s.distance_km == "number");
 }
@@ -7398,7 +7401,7 @@ const He = class He extends qt {
     const s = this._driveId;
     s != null && await this.load("drive", async () => {
       const r = await this.call("get_drive", { drive_id: s, max_points: 300 });
-      if (!Sr(r))
+      if (!Mr(r))
         throw new Error(this.text.failed);
       this._detail = r;
     });
@@ -7407,7 +7410,7 @@ const He = class He extends qt {
     const s = this._period;
     await this.load("stats", async () => {
       const r = Ar(s), l = await this.call("get_stats", r);
-      if (!Mr(l))
+      if (!Er(l))
         throw new Error(this.text.failed);
       this._stats = l;
     });
@@ -7422,7 +7425,7 @@ const He = class He extends qt {
       if (await r(), this._view !== s && s !== "drive")
         return;
     } catch (l) {
-      this._error = Cr(l, this.text.failed);
+      this._error = Sr(l, this.text.failed);
     } finally {
       this._loading = !1;
     }
@@ -7435,6 +7438,7 @@ const He = class He extends qt {
       s,
       { device_id: this.deviceId, ...r },
       void 0,
+      !1,
       !0
     ), u = Fe(l);
     return u && "response" in u ? u.response : l;
@@ -7637,7 +7641,7 @@ He.properties = {
     `
 ];
 let Oi = He;
-const Er = [
+const zr = [
   {
     name: "entity",
     required: !0,
@@ -7669,7 +7673,7 @@ const Er = [
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${Er}
+        .schema=${zr}
         .computeLabel=${(l) => l.name === "entity" ? s.entity : s.defaultView}
         @value-changed=${(l) => {
       this._config = { ...this._config, ...l.detail.value }, this.dispatchEvent(
