@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from custom_components.tesla_logger.const import (
     CONF_SCAN_INTERVAL,
     CONF_TOKEN,
@@ -12,7 +14,6 @@ from custom_components.tesla_logger.const import (
     DOMAIN,
 )
 from custom_components.tesla_logger.diagnostics import async_get_config_entry_diagnostics
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 from tests.fake_server import TOKEN
 
 

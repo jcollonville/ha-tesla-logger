@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 
+from homeassistant.helpers import device_registry as dr
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from custom_components.tesla_logger.const import (
     CONF_SCAN_INTERVAL,
     CONF_TOKEN,
@@ -11,8 +14,6 @@ from custom_components.tesla_logger.const import (
     CONF_WEBSOCKET,
     DOMAIN,
 )
-from homeassistant.helpers import device_registry as dr
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 from tests.fake_server import TOKEN, VIN
 
 

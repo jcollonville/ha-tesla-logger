@@ -23,5 +23,8 @@ src = ["custom_components", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components", "tests"]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E501"]

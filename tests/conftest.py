@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 import pytest
 import pytest_socket
 from aiohttp.test_utils import TestServer
+
 from tests.fake_server import FakeState, make_app
 
 pytest_plugins = "pytest_homeassistant_custom_component"

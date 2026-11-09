@@ -2,16 +2,6 @@
 
 from __future__ import annotations
 
-from custom_components.tesla_logger.binary_sensor import BINARY_DESCRIPTIONS
-from custom_components.tesla_logger.models import VehicleData, VehicleMeta
-from custom_components.tesla_logger.parsing import (
-    binary_value,
-    efficiency_wh_per_km,
-    exposed_closures,
-    match_geofence,
-    sensor_value,
-)
-from custom_components.tesla_logger.sensor import SENSOR_DESCRIPTIONS
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -26,6 +16,17 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
 )
+
+from custom_components.tesla_logger.binary_sensor import BINARY_DESCRIPTIONS
+from custom_components.tesla_logger.models import VehicleData, VehicleMeta
+from custom_components.tesla_logger.parsing import (
+    binary_value,
+    efficiency_wh_per_km,
+    exposed_closures,
+    match_geofence,
+    sensor_value,
+)
+from custom_components.tesla_logger.sensor import SENSOR_DESCRIPTIONS
 
 META = VehicleMeta(1, "5YJTEST0000000001", "Red", "Model Y", "Red")
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_USER
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from custom_components.tesla_logger.const import (
     CONF_SCAN_INTERVAL,
     CONF_TOKEN,
@@ -9,8 +12,6 @@ from custom_components.tesla_logger.const import (
     CONF_WEBSOCKET,
     DOMAIN,
 )
-from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_USER
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 from tests.fake_server import TOKEN
 
 

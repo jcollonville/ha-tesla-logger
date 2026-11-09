@@ -6,6 +6,7 @@ import asyncio
 from contextlib import suppress
 
 from aiohttp import ClientSession
+
 from custom_components.tesla_logger.websocket import TeslaLoggerWebSocket
 from tests.fake_server import TOKEN
 
