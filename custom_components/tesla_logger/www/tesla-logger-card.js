@@ -54,17 +54,17 @@ function nr() {
       function y() {
         return !1;
       }
-      function S(t, e) {
+      function C(t, e) {
         if (e === !1)
           return t;
         var i = Math.pow(10, e === void 0 ? 6 : e);
         return Math.round(t * i) / i;
       }
-      function V(t) {
+      function j(t) {
         return t.trim ? t.trim() : t.replace(/^\s+|\s+$/g, "");
       }
       function G(t) {
-        return V(t).split(/\s+/);
+        return j(t).split(/\s+/);
       }
       function B(t, e) {
         Object.prototype.hasOwnProperty.call(t, "options") || (t.options = t.options ? m(t.options) : {});
@@ -129,8 +129,8 @@ function nr() {
         throttle: M,
         wrapNum: O,
         falseFn: y,
-        formatNum: S,
-        trim: V,
+        formatNum: C,
+        trim: j,
         splitWords: G,
         setOptions: B,
         getParamString: Di,
@@ -452,7 +452,7 @@ function nr() {
         // @method toString(): String
         // Returns a string representation of the point for debugging purposes.
         toString: function() {
-          return "Point(" + S(this.x) + ", " + S(this.y) + ")";
+          return "Point(" + C(this.x) + ", " + C(this.y) + ")";
         }
       };
       function b(t, e, i) {
@@ -708,7 +708,7 @@ function nr() {
         // @method toString(): String
         // Returns a string representation of the point (for debugging purposes).
         toString: function(t) {
-          return "LatLng(" + S(this.lat, t) + ", " + S(this.lng, t) + ")";
+          return "LatLng(" + C(this.lat, t) + ", " + C(this.lng, t) + ")";
         },
         // @method distanceTo(otherLatLng: LatLng): Number
         // Returns the distance (in meters) to the given `LatLng` calculated using the [Spherical Law of Cosines](https://en.wikipedia.org/wiki/Spherical_law_of_cosines).
@@ -1101,7 +1101,7 @@ function nr() {
         }
       }
       function W(t, e) {
-        t.classList !== void 0 ? t.classList.remove(e) : oi(t, V((" " + we(t) + " ").replace(" " + e + " ", " ")));
+        t.classList !== void 0 ? t.classList.remove(e) : oi(t, j((" " + we(t) + " ").replace(" " + e + " ", " ")));
       }
       function oi(t, e) {
         t.className.baseVal === void 0 ? t.className = e : t.className.baseVal = e;
@@ -1577,30 +1577,30 @@ function nr() {
           var n = this.project(this.getCenter()), o = this.project(t), a = this.getSize(), h = this._zoom;
           t = E(t), e = e === void 0 ? h : e;
           var c = Math.max(a.x, a.y), d = c * this.getZoomScale(h, e), p = o.distanceTo(n) || 1, v = 1.42, w = v * v;
-          function C(q) {
+          function S(q) {
             var Be = q ? -1 : 1, Xs = q ? d : c, Qs = d * d - c * c + Be * w * w * p * p, tr = 2 * Xs * w * p, ki = Qs / tr, eo = Math.sqrt(ki * ki + 1) - ki, er = eo < 1e-9 ? -18 : Math.log(eo);
             return er;
           }
           function Y(q) {
             return (Math.exp(q) - Math.exp(-q)) / 2;
           }
-          function j(q) {
+          function V(q) {
             return (Math.exp(q) + Math.exp(-q)) / 2;
           }
           function st(q) {
-            return Y(q) / j(q);
+            return Y(q) / V(q);
           }
-          var tt = C(0);
+          var tt = S(0);
           function Wt(q) {
-            return c * (j(tt) / j(tt + v * q));
+            return c * (V(tt) / V(tt + v * q));
           }
           function Gs(q) {
-            return c * (j(tt) * st(tt + v * q) - Y(tt)) / w;
+            return c * (V(tt) * st(tt + v * q) - Y(tt)) / w;
           }
           function Ks(q) {
             return 1 - Math.pow(1 - q, 1.5);
           }
-          var Ys = Date.now(), Qn = (C(1) - tt) / v, Js = i.duration ? 1e3 * i.duration : 1e3 * Qn * 0.8;
+          var Ys = Date.now(), Qn = (S(1) - tt) / v, Js = i.duration ? 1e3 * i.duration : 1e3 * Qn * 0.8;
           function to() {
             var q = (Date.now() - Ys) / Js, Be = Ks(q) * Qn;
             q <= 1 ? (this._flyToFrame = J(to, this), this._move(
@@ -1819,7 +1819,7 @@ function nr() {
         // the given bounds in its entirety.
         getBoundsZoom: function(t, e, i) {
           t = F(t), i = b(i || [0, 0]);
-          var n = this.getZoom() || 0, o = this.getMinZoom(), a = this.getMaxZoom(), h = t.getNorthWest(), c = t.getSouthEast(), d = this.getSize().subtract(i), p = X(this.project(c, n), this.project(h, n)).getSize(), v = x.any3d ? this.options.zoomSnap : 1, w = d.x / p.x, C = d.y / p.y, Y = e ? Math.max(w, C) : Math.min(w, C);
+          var n = this.getZoom() || 0, o = this.getMinZoom(), a = this.getMaxZoom(), h = t.getNorthWest(), c = t.getSouthEast(), d = this.getSize().subtract(i), p = X(this.project(c, n), this.project(h, n)).getSize(), v = x.any3d ? this.options.zoomSnap : 1, w = d.x / p.x, S = d.y / p.y, Y = e ? Math.max(w, S) : Math.min(w, S);
           return n = this.getScaleZoom(Y, n), v && (n = Math.round(n / (v / 100)) * (v / 100), n = e ? Math.ceil(n / v) * v : Math.floor(n / v) * v), Math.max(o, Math.min(a, n));
         },
         // @method getSize(): Point
@@ -2764,12 +2764,12 @@ function nr() {
         }
       });
       function Tn(t, e, i) {
-        var n, o = [1, 4, 2, 8], a, h, c, d, p, v, w, C;
+        var n, o = [1, 4, 2, 8], a, h, c, d, p, v, w, S;
         for (a = 0, v = t.length; a < v; a++)
           t[a]._code = St(t[a], e);
         for (c = 0; c < 4; c++) {
           for (w = o[c], n = [], a = 0, v = t.length, h = v - 1; a < v; h = a++)
-            d = t[a], p = t[h], d._code & w ? p._code & w || (C = Te(p, d, w, e, i), C._code = St(C, e), n.push(C)) : (p._code & w && (C = Te(p, d, w, e, i), C._code = St(C, e), n.push(C)), n.push(d));
+            d = t[a], p = t[h], d._code & w ? p._code & w || (S = Te(p, d, w, e, i), S._code = St(S, e), n.push(S)) : (p._code & w && (S = Te(p, d, w, e, i), S._code = St(S, e), n.push(S)), n.push(d));
           t = n;
         }
         return t;
@@ -2779,14 +2779,14 @@ function nr() {
         if (!t || t.length === 0)
           throw new Error("latlngs not passed");
         ot(t) || (console.warn("latlngs are not flat! Only the first ring will be used"), t = t[0]);
-        var w = E([0, 0]), C = F(t), Y = C.getNorthWest().distanceTo(C.getSouthWest()) * C.getNorthEast().distanceTo(C.getNorthWest());
+        var w = E([0, 0]), S = F(t), Y = S.getNorthWest().distanceTo(S.getSouthWest()) * S.getNorthEast().distanceTo(S.getNorthWest());
         Y < 1700 && (w = vi(t));
-        var j = t.length, st = [];
-        for (i = 0; i < j; i++) {
+        var V = t.length, st = [];
+        for (i = 0; i < V; i++) {
           var tt = E(t[i]);
           st.push(e.project(E([tt.lat - w.lat, tt.lng - w.lng])));
         }
-        for (c = d = p = 0, i = 0, n = j - 1; i < j; n = i++)
+        for (c = d = p = 0, i = 0, n = V - 1; i < V; n = i++)
           o = st[i], a = st[n], h = o.y * a.x - a.y * o.x, d += (o.x + a.x) * h, p += (o.y + a.y) * h, c += h * 3;
         c === 0 ? v = st[0] : v = [d / c, p / c];
         var Wt = e.unproject(b(v));
@@ -2874,20 +2874,20 @@ function nr() {
         if (!t || t.length === 0)
           throw new Error("latlngs not passed");
         ot(t) || (console.warn("latlngs are not flat! Only the first ring will be used"), t = t[0]);
-        var v = E([0, 0]), w = F(t), C = w.getNorthWest().distanceTo(w.getSouthWest()) * w.getNorthEast().distanceTo(w.getNorthWest());
-        C < 1700 && (v = vi(t));
-        var Y = t.length, j = [];
+        var v = E([0, 0]), w = F(t), S = w.getNorthWest().distanceTo(w.getSouthWest()) * w.getNorthEast().distanceTo(w.getNorthWest());
+        S < 1700 && (v = vi(t));
+        var Y = t.length, V = [];
         for (i = 0; i < Y; i++) {
           var st = E(t[i]);
-          j.push(e.project(E([st.lat - v.lat, st.lng - v.lng])));
+          V.push(e.project(E([st.lat - v.lat, st.lng - v.lng])));
         }
         for (i = 0, n = 0; i < Y - 1; i++)
-          n += j[i].distanceTo(j[i + 1]) / 2;
+          n += V[i].distanceTo(V[i + 1]) / 2;
         if (n === 0)
-          p = j[0];
+          p = V[0];
         else
           for (i = 0, a = 0; i < Y - 1; i++)
-            if (h = j[i], c = j[i + 1], o = h.distanceTo(c), a += o, a > n) {
+            if (h = V[i], c = V[i + 1], o = h.distanceTo(c), a += o, a > n) {
               d = (a - n) / o, p = [
                 c.x - d * (c.x - h.x),
                 c.y - d * (c.y - h.y)
@@ -4045,8 +4045,8 @@ function nr() {
             return new _t(o);
           case "FeatureCollection":
             for (p = 0, v = i.features.length; p < v; p++) {
-              var C = Ce(i.features[p], e);
-              C && o.push(C);
+              var S = Ce(i.features[p], e);
+              S && o.push(S);
             }
             return new _t(o);
           default:
@@ -4065,7 +4065,7 @@ function nr() {
         return n;
       }
       function Li(t, e) {
-        return t = E(t), t.alt !== void 0 ? [S(t.lng, e), S(t.lat, e), S(t.alt, e)] : [S(t.lng, e), S(t.lat, e)];
+        return t = E(t), t.alt !== void 0 ? [C(t.lng, e), C(t.lat, e), C(t.alt, e)] : [C(t.lng, e), C(t.lat, e)];
       }
       function Me(t, e, i, n) {
         for (var o = [], a = 0, h = t.length; a < h; a++)
@@ -5184,11 +5184,11 @@ function nr() {
                 return;
               }
               for (var w = o.min.y; w <= o.max.y; w++)
-                for (var C = o.min.x; C <= o.max.x; C++) {
-                  var Y = new T(C, w);
+                for (var S = o.min.x; S <= o.max.x; S++) {
+                  var Y = new T(S, w);
                   if (Y.z = this._tileZoom, !!this._isValidTile(Y)) {
-                    var j = this._tiles[this._tileCoordsToKey(Y)];
-                    j ? j.current = !0 : h.push(Y);
+                    var V = this._tiles[this._tileCoordsToKey(Y)];
+                    V ? V.current = !0 : h.push(Y);
                   }
                 }
               if (h.sort(function(tt, Wt) {
@@ -5196,8 +5196,8 @@ function nr() {
               }), h.length !== 0) {
                 this._loading || (this._loading = !0, this.fire("loading"));
                 var st = document.createDocumentFragment();
-                for (C = 0; C < h.length; C++)
-                  this._addTile(h[C], st);
+                for (S = 0; S < h.length; S++)
+                  this._addTile(h[S], st);
                 this._level.el.appendChild(st);
               }
             }
@@ -6051,9 +6051,9 @@ function nr() {
             e.fire("moveend");
           else {
             this._prunePositions(+/* @__PURE__ */ new Date());
-            var o = this._lastPos.subtract(this._positions[0]), a = (this._lastTime - this._times[0]) / 1e3, h = i.easeLinearity, c = o.multiplyBy(h / a), d = c.distanceTo([0, 0]), p = Math.min(i.inertiaMaxSpeed, d), v = c.multiplyBy(p / d), w = p / (i.inertiaDeceleration * h), C = v.multiplyBy(-w / 2).round();
-            !C.x && !C.y ? e.fire("moveend") : (C = e._limitOffset(C, e.options.maxBounds), J(function() {
-              e.panBy(C, {
+            var o = this._lastPos.subtract(this._positions[0]), a = (this._lastTime - this._times[0]) / 1e3, h = i.easeLinearity, c = o.multiplyBy(h / a), d = c.distanceTo([0, 0]), p = Math.min(i.inertiaMaxSpeed, d), v = c.multiplyBy(p / d), w = p / (i.inertiaDeceleration * h), S = v.multiplyBy(-w / 2).round();
+            !S.x && !S.y ? e.fire("moveend") : (S = e._limitOffset(S, e.options.maxBounds), J(function() {
+              e.panBy(S, {
                 duration: w,
                 easeLinearity: h,
                 noMoveStart: !0,
@@ -6613,10 +6613,10 @@ const mr = (f, s) => {
   let u, m = s === 2 ? "<svg>" : s === 3 ? "<math>" : "", _ = le;
   for (let P = 0; P < r; P++) {
     const g = f[P];
-    let M, O, y = -1, S = 0;
-    for (; S < g.length && (_.lastIndex = S, O = _.exec(g), O !== null); ) S = _.lastIndex, _ === le ? O[1] === "!--" ? _ = lo : O[1] !== void 0 ? _ = uo : O[2] !== void 0 ? (Po.test(O[2]) && (u = RegExp("</" + O[2], "g")), _ = Mt) : O[3] !== void 0 && (_ = Mt) : _ === Mt ? O[0] === ">" ? (_ = u ?? le, y = -1) : O[1] === void 0 ? y = -2 : (y = _.lastIndex - O[2].length, M = O[1], _ = O[3] === void 0 ? Mt : O[3] === '"' ? fo : co) : _ === fo || _ === co ? _ = Mt : _ === lo || _ === uo ? _ = le : (_ = Mt, u = void 0);
-    const V = _ === Mt && f[P + 1].startsWith("/>") ? " " : "";
-    m += _ === le ? g + pr : y >= 0 ? (l.push(M), g.slice(0, y) + wo + g.slice(y) + Pt + V) : g + Pt + (y === -2 ? P : V);
+    let M, O, y = -1, C = 0;
+    for (; C < g.length && (_.lastIndex = C, O = _.exec(g), O !== null); ) C = _.lastIndex, _ === le ? O[1] === "!--" ? _ = lo : O[1] !== void 0 ? _ = uo : O[2] !== void 0 ? (Po.test(O[2]) && (u = RegExp("</" + O[2], "g")), _ = Mt) : O[3] !== void 0 && (_ = Mt) : _ === Mt ? O[0] === ">" ? (_ = u ?? le, y = -1) : O[1] === void 0 ? y = -2 : (y = _.lastIndex - O[2].length, M = O[1], _ = O[3] === void 0 ? Mt : O[3] === '"' ? fo : co) : _ === fo || _ === co ? _ = Mt : _ === lo || _ === uo ? _ = le : (_ = Mt, u = void 0);
+    const j = _ === Mt && f[P + 1].startsWith("/>") ? " " : "";
+    m += _ === le ? g + pr : y >= 0 ? (l.push(M), g.slice(0, y) + wo + g.slice(y) + Pt + j) : g + Pt + (y === -2 ? P : j);
   }
   return [To(f, m + (f[r] || "<?>") + (s === 2 ? "</svg>" : s === 3 ? "</math>" : "")), l];
 };
@@ -6633,15 +6633,15 @@ class _e {
     for (; (u = Et.nextNode()) !== null && g.length < P; ) {
       if (u.nodeType === 1) {
         if (u.hasAttributes()) for (const y of u.getAttributeNames()) if (y.endsWith(wo)) {
-          const S = O[_++], V = u.getAttribute(y).split(Pt), G = /([.?@])?(.*)/.exec(S);
-          g.push({ type: 1, index: m, name: G[2], strings: V, ctor: G[1] === "." ? vr : G[1] === "?" ? yr : G[1] === "@" ? xr : We }), u.removeAttribute(y);
+          const C = O[_++], j = u.getAttribute(y).split(Pt), G = /([.?@])?(.*)/.exec(C);
+          g.push({ type: 1, index: m, name: G[2], strings: j, ctor: G[1] === "." ? vr : G[1] === "?" ? yr : G[1] === "@" ? xr : We }), u.removeAttribute(y);
         } else y.startsWith(Pt) && (g.push({ type: 6, index: m }), u.removeAttribute(y));
         if (Po.test(u.tagName)) {
-          const y = u.textContent.split(Pt), S = y.length - 1;
-          if (S > 0) {
+          const y = u.textContent.split(Pt), C = y.length - 1;
+          if (C > 0) {
             u.textContent = De ? De.emptyScript : "";
-            for (let V = 0; V < S; V++) u.append(y[V], fe()), Et.nextNode(), g.push({ type: 2, index: ++m });
-            u.append(y[S], fe());
+            for (let j = 0; j < C; j++) u.append(y[j], fe()), Et.nextNode(), g.push({ type: 2, index: ++m });
+            u.append(y[C], fe());
           }
         }
       } else if (u.nodeType === 8) if (u.data === bo) g.push({ type: 2, index: m });
@@ -7106,10 +7106,10 @@ const He = class He extends qt {
       return s;
     const u = (g = (P = r.entities) == null ? void 0 : P[l]) == null ? void 0 : g.device_id, m = r.states[l].attributes.vin;
     for (const [O, y] of Object.entries(r.states)) {
-      const S = (M = r.entities) == null ? void 0 : M[O], V = !!(u && (S == null ? void 0 : S.device_id) === u), G = !!(m && y.attributes.vin === m);
-      if (!V && !G)
+      const C = (M = r.entities) == null ? void 0 : M[O], j = !!(u && (C == null ? void 0 : C.device_id) === u), G = !!(m && y.attributes.vin === m);
+      if (!j && !G)
         continue;
-      const B = (S == null ? void 0 : S.translation_key) || (typeof y.attributes.key == "string" ? y.attributes.key : void 0);
+      const B = (C == null ? void 0 : C.translation_key) || (typeof y.attributes.key == "string" ? y.attributes.key : void 0);
       B && s.set(B, y);
     }
     return s;
@@ -7134,8 +7134,8 @@ const He = class He extends qt {
     return !r || r === "unknown" || r === "unavailable" ? null : r;
   }
   header() {
-    var M, O, y, S, V, G;
-    const s = this.numeric("battery_level"), r = s == null ? "—" : `${Math.round(s)}`, l = s == null ? 0 : Math.max(0, Math.min(100, s)), u = this.label("activity") || "", m = this.numeric("rated_range"), _ = this.deviceId ? (y = (O = (M = this.hass) == null ? void 0 : M.devices) == null ? void 0 : O[this.deviceId]) == null ? void 0 : y.name : void 0, P = (G = (V = this.hass) == null ? void 0 : V.states[((S = this._config) == null ? void 0 : S.entity) || ""]) == null ? void 0 : G.attributes.friendly_name, g = _ || (typeof P == "string" ? P : this.text.unknown);
+    var M, O, y, C, j, G;
+    const s = this.numeric("battery_level"), r = s == null ? "—" : `${Math.round(s)}`, l = s == null ? 0 : Math.max(0, Math.min(100, s)), u = this.label("activity") || "", m = this.numeric("rated_range"), _ = this.deviceId ? (y = (O = (M = this.hass) == null ? void 0 : M.devices) == null ? void 0 : O[this.deviceId]) == null ? void 0 : y.name : void 0, P = (G = (j = this.hass) == null ? void 0 : j.states[((C = this._config) == null ? void 0 : C.entity) || ""]) == null ? void 0 : G.attributes.friendly_name, g = _ || (typeof P == "string" ? P : this.text.unknown);
     return D`
       <div class="header">
         <svg class="ring" viewBox="0 0 36 36" aria-label="${r}%">
@@ -7449,18 +7449,20 @@ const He = class He extends qt {
     if (!s || r.length === 0)
       return;
     if (this.map && this.mapEl !== s && this.destroyMap(), !this.map) {
-      this.map = Ft.map(s, { zoomControl: !0, attributionControl: !0 });
-      const V = !!((O = (M = this.hass) == null ? void 0 : M.themes) != null && O.darkMode) ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-      Ft.tileLayer(V, {
-        subdomains: "abcd",
-        maxZoom: 20,
-        referrerPolicy: "origin",
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-      }).addTo(this.map), this.mapEl = s;
+      if (this.map = Ft.map(s, { zoomControl: !0, attributionControl: !0 }), Ft.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        // HA serves Referrer-Policy: no-referrer; override per-tile so OSM gets a Referer.
+        referrerPolicy: "strict-origin-when-cross-origin",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(this.map), (O = (M = this.hass) == null ? void 0 : M.themes) != null && O.darkMode) {
+        const C = this.map.getPane("tilePane");
+        C && (C.style.filter = "invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9)");
+      }
+      this.mapEl = s;
     }
     (y = this.routeLayer) == null || y.remove();
     const l = Ft.layerGroup().addTo(this.map), u = r.map(
-      (S) => [S.latitude, S.longitude]
+      (C) => [C.latitude, C.longitude]
     ), m = getComputedStyle(this).getPropertyValue("--primary-color").trim() || "#03a9f4", _ = Ft.polyline(u, { color: m, weight: 4 }).addTo(l);
     Ft.circleMarker(u[0], {
       radius: 6,
@@ -7475,8 +7477,8 @@ const He = class He extends qt {
       fillColor: "#c62828",
       fillOpacity: 1
     }).addTo(l), this.routeLayer = l, this.map.fitBounds(_.getBounds().pad(0.15)), requestAnimationFrame(() => {
-      var S;
-      return (S = this.map) == null ? void 0 : S.invalidateSize();
+      var C;
+      return (C = this.map) == null ? void 0 : C.invalidateSize();
     });
   }
   destroyMap() {

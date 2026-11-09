@@ -793,18 +793,19 @@ export class TeslaLoggerCard extends LitElement {
     }
     if (!this.map) {
       this.map = L.map(el, { zoomControl: true, attributionControl: true });
-      const dark = Boolean(this.hass?.themes?.darkMode);
-      const tiles = dark
-        ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-      L.tileLayer(tiles, {
-        subdomains: "abcd",
-        maxZoom: 20,
-        referrerPolicy: "origin",
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        // HA serves Referrer-Policy: no-referrer; override per-tile so OSM gets a Referer.
+        referrerPolicy: "strict-origin-when-cross-origin",
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
-          '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(this.map);
+      if (this.hass?.themes?.darkMode) {
+        const pane = this.map.getPane("tilePane");
+        if (pane) {
+          pane.style.filter = "invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9)";
+        }
+      }
       this.mapEl = el;
     }
     this.routeLayer?.remove();
