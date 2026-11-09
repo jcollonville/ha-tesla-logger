@@ -1,0 +1,91 @@
+get_drives:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: tesla_logger
+    from:
+      required: false
+      selector:
+        datetime:
+    to:
+      required: false
+      selector:
+        datetime:
+    page:
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+    per_page:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+get_drive:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: tesla_logger
+    drive_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    max_points:
+      required: false
+      selector:
+        number:
+          min: 2
+          max: 2000
+          mode: box
+get_charges:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: tesla_logger
+    from:
+      required: false
+      selector:
+        datetime:
+    to:
+      required: false
+      selector:
+        datetime:
+    page:
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+    per_page:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+get_stats:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: tesla_logger
+    from:
+      required: false
+      selector:
+        datetime:
+    to:
+      required: false
+      selector:
+        datetime:

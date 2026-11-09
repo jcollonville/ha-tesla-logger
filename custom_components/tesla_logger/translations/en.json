@@ -1,0 +1,140 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to tesla-logger",
+        "description": "The server is read-only. Create an API token (tl_...) on its status page. The token stays on Home Assistant and is not sent to the browser.",
+        "data": {
+          "url": "Server URL",
+          "token": "API token"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate",
+        "description": "The API token for {name} was rejected. Paste a new token from the tesla-logger status page.",
+        "data": {
+          "token": "API token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the server",
+      "invalid_auth": "Invalid API token",
+      "invalid_url": "Enter an http or https URL without a password",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This server is already configured",
+      "reauth_successful": "Authentication updated"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Scan settings",
+        "description": "The WebSocket pushes live state. REST polling fills in fields the socket does not send, and it is the fallback when the socket is down.",
+        "data": {
+          "scan_interval": "REST poll interval",
+          "websocket": "Enable live WebSocket"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_level": { "name": "Battery" },
+      "usable_battery_level": { "name": "Usable battery" },
+      "rated_range": { "name": "Range" },
+      "ideal_range": { "name": "Ideal range" },
+      "estimated_range": { "name": "Estimated range" },
+      "odometer": { "name": "Odometer" },
+      "speed": { "name": "Speed" },
+      "power": { "name": "Power" },
+      "inside_temp": { "name": "Inside temperature" },
+      "outside_temp": { "name": "Outside temperature" },
+      "charging_state": { "name": "Charging state" },
+      "charger_power": { "name": "Charger power" },
+      "charger_voltage": { "name": "Charger voltage" },
+      "charger_current": { "name": "Charger current" },
+      "energy_added": { "name": "Energy added" },
+      "charge_limit": { "name": "Charge limit" },
+      "activity": { "name": "State" },
+      "software_version": { "name": "Software version" },
+      "update_status": { "name": "Update status" },
+      "shift_state": { "name": "Shift state" },
+      "geofence": { "name": "Geofence" },
+      "heading": { "name": "Heading" },
+      "last_error": { "name": "Last error" },
+      "last_drive_distance": { "name": "Last drive distance" },
+      "last_drive_duration": { "name": "Last drive duration" },
+      "last_drive_energy": { "name": "Last drive energy" },
+      "last_drive_efficiency": { "name": "Last drive efficiency" },
+      "last_charge_energy": { "name": "Last charge energy" },
+      "last_charge_duration": { "name": "Last charge duration" },
+      "tpms_front_left": { "name": "Front left tire pressure" },
+      "tpms_front_right": { "name": "Front right tire pressure" },
+      "tpms_rear_left": { "name": "Rear left tire pressure" },
+      "tpms_rear_right": { "name": "Rear right tire pressure" }
+    },
+    "binary_sensor": {
+      "plugged_in": { "name": "Plugged in" },
+      "lock": { "name": "Lock" },
+      "sentry": { "name": "Sentry mode" },
+      "door_front_left": { "name": "Front left door" },
+      "door_front_right": { "name": "Front right door" },
+      "door_rear_left": { "name": "Rear left door" },
+      "door_rear_right": { "name": "Rear right door" },
+      "window_front_left": { "name": "Front left window" },
+      "window_front_right": { "name": "Front right window" },
+      "window_rear_left": { "name": "Rear left window" },
+      "window_rear_right": { "name": "Rear right window" },
+      "frunk": { "name": "Frunk" },
+      "trunk": { "name": "Trunk" }
+    },
+    "device_tracker": {
+      "location": { "name": "Location" }
+    }
+  },
+  "services": {
+    "get_drives": {
+      "name": "Get drives",
+      "description": "Return a page of drives from tesla-logger.",
+      "fields": {
+        "device_id": { "name": "Vehicle", "description": "Tesla Logger vehicle." },
+        "from": { "name": "From", "description": "Include drives starting at or after this time." },
+        "to": { "name": "To", "description": "Include drives starting before this time." },
+        "page": { "name": "Page", "description": "Page number, starting at 1." },
+        "per_page": { "name": "Per page", "description": "Page size, from 1 to 100." }
+      }
+    },
+    "get_drive": {
+      "name": "Get drive",
+      "description": "Return one drive, including its simplified route and time series.",
+      "fields": {
+        "device_id": { "name": "Vehicle", "description": "Tesla Logger vehicle." },
+        "drive_id": { "name": "Drive ID", "description": "Drive id from the server." },
+        "max_points": { "name": "Max points", "description": "Maximum route and series points (2-2000)." }
+      }
+    },
+    "get_charges": {
+      "name": "Get charges",
+      "description": "Return a page of charge sessions from tesla-logger.",
+      "fields": {
+        "device_id": { "name": "Vehicle", "description": "Tesla Logger vehicle." },
+        "from": { "name": "From", "description": "Include charges starting at or after this time." },
+        "to": { "name": "To", "description": "Include charges starting before this time." },
+        "page": { "name": "Page", "description": "Page number, starting at 1." },
+        "per_page": { "name": "Per page", "description": "Page size, from 1 to 100." }
+      }
+    },
+    "get_stats": {
+      "name": "Get stats",
+      "description": "Return drive and charge totals for a period.",
+      "fields": {
+        "device_id": { "name": "Vehicle", "description": "Tesla Logger vehicle." },
+        "from": { "name": "From", "description": "Start of the period." },
+        "to": { "name": "To", "description": "End of the period." }
+      }
+    }
+  }
+}

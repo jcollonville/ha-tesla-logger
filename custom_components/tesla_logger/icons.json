@@ -1,0 +1,35 @@
+{
+  "entity": {
+    "sensor": {
+      "battery_level": { "default": "mdi:battery-high" },
+      "activity": {
+        "default": "mdi:car",
+        "state": {
+          "online": "mdi:car-connected",
+          "asleep": "mdi:sleep",
+          "offline": "mdi:cloud-off-outline",
+          "driving": "mdi:car",
+          "charging": "mdi:ev-station",
+          "updating": "mdi:update"
+        }
+      },
+      "rated_range": { "default": "mdi:map-marker-distance" },
+      "speed": { "default": "mdi:speedometer" },
+      "power": { "default": "mdi:flash" },
+      "inside_temp": { "default": "mdi:thermometer" },
+      "outside_temp": { "default": "mdi:thermometer" },
+      "charging_state": { "default": "mdi:ev-station" },
+      "charger_power": { "default": "mdi:lightning-bolt" },
+      "geofence": { "default": "mdi:map-marker" },
+      "software_version": { "default": "mdi:chip" },
+      "last_drive_distance": { "default": "mdi:road-variant" },
+      "last_drive_efficiency": { "default": "mdi:leaf" }
+    },
+    "binary_sensor": {
+      "sentry": { "default": "mdi:cctv" }
+    },
+    "device_tracker": {
+      "location": { "default": "mdi:car" }
+    }
+  }
+}
