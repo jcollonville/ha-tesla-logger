@@ -6,6 +6,7 @@ import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TeslaLoggerApi, TeslaLoggerApiError, TeslaLoggerAuthError
@@ -15,6 +16,8 @@ from .frontend import async_register_card
 from .services import async_register_services, async_unload_services
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:

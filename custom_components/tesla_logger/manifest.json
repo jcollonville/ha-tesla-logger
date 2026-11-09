@@ -2,6 +2,7 @@
   "domain": "tesla_logger",
   "name": "Tesla Logger",
   "codeowners": ["@jcollonville"],
+  "after_dependencies": ["frontend", "http"],
   "config_flow": true,
   "documentation": "https://github.com/jcollonville/ha-tesla-logger",
   "integration_type": "hub",

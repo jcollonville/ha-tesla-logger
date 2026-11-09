@@ -21,6 +21,8 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # GitHub topics are a repository setting, not part of this tree.
+          ignore: topics
 
   python:
     name: Python
