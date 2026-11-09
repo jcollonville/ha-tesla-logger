@@ -58,6 +58,7 @@ jobs:
           npm ci
           npm run lint
           npm run typecheck
+          npm test
           npm run build
       - name: Built card is committed and self-contained
         run: |

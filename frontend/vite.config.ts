@@ -1,9 +1,13 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
+  test: {
+    environment: "happy-dom",
+    include: ["src/**/*.test.ts"],
+  },
   build: {
     lib: {
       entry: `${root}src/tesla-logger-card.ts`,

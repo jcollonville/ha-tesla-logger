@@ -772,6 +772,7 @@ export class TeslaLoggerCard extends LitElement {
       service,
       { device_id: this.deviceId, ...data },
       undefined,
+      false,
       true,
     );
     const record = asRecord(result);
