@@ -48,7 +48,19 @@ async def test_entities_follow_the_rest_payload(
     assert battery.attributes["device_class"] == "battery"
     assert battery.attributes["unit_of_measurement"] == "%"
     assert float(_state(hass, "sensor", "rated_range").state) == 280.5
-    assert _state(hass, "sensor", "rated_range").attributes["unit_of_measurement"] == "km"
+    rated = _state(hass, "sensor", "rated_range")
+    assert rated.attributes["unit_of_measurement"] == "km"
+    registry = er.async_get(hass)
+    rated_entry = registry.async_get(rated.entity_id)
+    assert rated_entry is not None
+    assert rated_entry.options["sensor"]["suggested_display_precision"] == 0
+    drive_duration = _state(hass, "sensor", "last_drive_duration")
+    assert drive_duration.attributes["device_class"] == "duration"
+    assert drive_duration.attributes["unit_of_measurement"] == "min"
+    assert float(drive_duration.state) == 30
+    charge_duration = _state(hass, "sensor", "last_charge_duration")
+    assert charge_duration.attributes["unit_of_measurement"] == "h"
+    assert abs(float(charge_duration.state) - (2400 / 3600)) < 1e-9
     assert float(_state(hass, "sensor", "odometer").state) == 12345.6
     assert _state(hass, "sensor", "activity").state == "charging"
     assert _state(hass, "sensor", "geofence").state == "Home"
@@ -92,6 +104,44 @@ async def test_entities_follow_the_rest_payload(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert float(_state(hass, "sensor", "battery_level").state) == 61
+
+
+async def test_existing_duration_sensors_leave_raw_seconds(
+    hass, logger_server, enable_custom_integrations
+) -> None:
+    """Entities registered on seconds pick up minutes or hours on reload."""
+    _state_api, url = logger_server
+    entry = _entry(url, websocket=False)
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+
+    def _seconds() -> dict:
+        return {"sensor.private": {"suggested_unit_of_measurement": "s"}}
+
+    for key in ("last_drive_duration", "last_charge_duration"):
+        registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"{VIN}_{key}",
+            config_entry=entry,
+            original_device_class="duration",
+            unit_of_measurement="s",
+            get_initial_options=_seconds,
+        )
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    drive = _state(hass, "sensor", "last_drive_duration")
+    charge = _state(hass, "sensor", "last_charge_duration")
+    assert drive.attributes["unit_of_measurement"] == "min"
+    assert float(drive.state) == 30
+    assert charge.attributes["unit_of_measurement"] == "h"
+    assert abs(float(charge.state) - (2400 / 3600)) < 1e-9
+    drive_entry = registry.async_get(drive.entity_id)
+    assert drive_entry is not None
+    assert drive_entry.options["sensor.private"]["suggested_unit_of_measurement"] == "min"
+    assert "unit_of_measurement" not in drive_entry.options.get("sensor", {})
 
 
 async def test_missing_optional_fields_stay_unknown_and_closures_are_absent(
