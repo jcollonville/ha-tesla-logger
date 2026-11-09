@@ -15,6 +15,7 @@ from homeassistant.const import (
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
+    UnitOfTime,
 )
 
 from custom_components.tesla_logger.binary_sensor import BINARY_DESCRIPTIONS
@@ -98,10 +99,67 @@ def test_units_and_state_classes() -> None:
     assert by_key["tpms_front_left"].device_class is SensorDeviceClass.PRESSURE
     assert by_key["tpms_front_left"].native_unit_of_measurement == UnitOfPressure.BAR
     assert by_key["last_drive_efficiency"].native_unit_of_measurement == "Wh/km"
+    drive_duration = by_key["last_drive_duration"]
+    assert drive_duration.device_class is SensorDeviceClass.DURATION
+    assert drive_duration.native_unit_of_measurement == UnitOfTime.SECONDS
+    assert drive_duration.suggested_unit_of_measurement == UnitOfTime.MINUTES
+    charge_duration = by_key["last_charge_duration"]
+    assert charge_duration.device_class is SensorDeviceClass.DURATION
+    assert charge_duration.native_unit_of_measurement == UnitOfTime.SECONDS
+    assert charge_duration.suggested_unit_of_measurement == UnitOfTime.HOURS
     lock = next(item for item in BINARY_DESCRIPTIONS if item.key == "lock")
     assert lock.device_class is BinarySensorDeviceClass.LOCK
     plug = next(item for item in BINARY_DESCRIPTIONS if item.key == "plugged_in")
     assert plug.device_class is BinarySensorDeviceClass.PLUG
+
+
+# Display precision for every numeric sensor. Text sensors stay unset.
+_DISPLAY_PRECISION = {
+    "battery_level": 0,
+    "usable_battery_level": 0,
+    "rated_range": 0,
+    "ideal_range": 0,
+    "estimated_range": 0,
+    "odometer": 0,
+    "speed": 0,
+    "power": 1,
+    "inside_temp": 1,
+    "outside_temp": 1,
+    "charger_power": 1,
+    "charger_voltage": 0,
+    "charger_current": 0,
+    "energy_added": 2,
+    "charge_limit": 0,
+    "heading": 0,
+    "last_drive_distance": 0,
+    "last_drive_duration": 0,
+    "last_drive_energy": 2,
+    "last_drive_efficiency": 0,
+    "last_charge_energy": 2,
+    "last_charge_duration": 1,
+    "tpms_front_left": 2,
+    "tpms_front_right": 2,
+    "tpms_rear_left": 2,
+    "tpms_rear_right": 2,
+}
+
+
+def test_suggested_display_precision() -> None:
+    """Numeric sensors suggest a short display; the stored state stays exact."""
+    seen = {item.key: item.suggested_display_precision for item in SENSOR_DESCRIPTIONS}
+    assert set(seen) == set(_DISPLAY_PRECISION) | {
+        "charging_state",
+        "activity",
+        "software_version",
+        "update_status",
+        "shift_state",
+        "geofence",
+        "last_error",
+    }
+    for key, precision in _DISPLAY_PRECISION.items():
+        assert seen[key] == precision, key
+    for key in seen.keys() - _DISPLAY_PRECISION.keys():
+        assert seen[key] is None, key
 
 
 def test_optional_fields_and_derived_values() -> None:

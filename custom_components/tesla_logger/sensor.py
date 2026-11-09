@@ -23,6 +23,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -32,6 +33,9 @@ from .entity import TeslaLoggerEntity
 from .parsing import battery_icon, plugged_in, sensor_value
 
 _DIAGNOSTIC = EntityCategory.DIAGNOSTIC
+_SENSOR_OPTIONS = "sensor"
+_SENSOR_PRIVATE = "sensor.private"
+_UNIT_OF_MEASUREMENT = "unit_of_measurement"
 
 
 def _sensor(
@@ -39,6 +43,7 @@ def _sensor(
     *,
     device_class: SensorDeviceClass | None = None,
     unit: str | None = None,
+    suggested_unit: str | None = None,
     state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT,
     precision: int | None = None,
     category: EntityCategory | None = None,
@@ -49,6 +54,7 @@ def _sensor(
         has_entity_name=True,
         device_class=device_class,
         native_unit_of_measurement=unit,
+        suggested_unit_of_measurement=suggested_unit,
         state_class=state_class,
         suggested_display_precision=precision,
         entity_category=category,
@@ -73,20 +79,20 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
         "rated_range",
         device_class=SensorDeviceClass.DISTANCE,
         unit=UnitOfLength.KILOMETERS,
-        precision=1,
+        precision=0,
     ),
     _sensor(
         "ideal_range",
         device_class=SensorDeviceClass.DISTANCE,
         unit=UnitOfLength.KILOMETERS,
-        precision=1,
+        precision=0,
         category=_DIAGNOSTIC,
     ),
     _sensor(
         "estimated_range",
         device_class=SensorDeviceClass.DISTANCE,
         unit=UnitOfLength.KILOMETERS,
-        precision=1,
+        precision=0,
         category=_DIAGNOSTIC,
     ),
     _sensor(
@@ -94,7 +100,7 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.DISTANCE,
         unit=UnitOfLength.KILOMETERS,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        precision=1,
+        precision=0,
     ),
     _sensor(
         "speed",
@@ -137,7 +143,7 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
         "charger_current",
         device_class=SensorDeviceClass.CURRENT,
         unit=UnitOfElectricCurrent.AMPERE,
-        precision=1,
+        precision=0,
     ),
     _sensor(
         "energy_added",
@@ -158,12 +164,13 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
         "last_drive_distance",
         device_class=SensorDeviceClass.DISTANCE,
         unit=UnitOfLength.KILOMETERS,
-        precision=1,
+        precision=0,
     ),
     _sensor(
         "last_drive_duration",
         device_class=SensorDeviceClass.DURATION,
         unit=UnitOfTime.SECONDS,
+        suggested_unit=UnitOfTime.MINUTES,
         precision=0,
     ),
     _sensor(
@@ -177,11 +184,13 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
         unit=UnitOfEnergy.KILO_WATT_HOUR,
         precision=2,
     ),
+    # Hours with one decimal: 16336 s displays as 4.5 h, not 5 h.
     _sensor(
         "last_charge_duration",
         device_class=SensorDeviceClass.DURATION,
         unit=UnitOfTime.SECONDS,
-        precision=0,
+        suggested_unit=UnitOfTime.HOURS,
+        precision=1,
     ),
     _sensor(
         "tpms_front_left",
@@ -246,6 +255,41 @@ class TeslaLoggerSensor(TeslaLoggerEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, description.key)
         self.entity_description = description
+
+    async def async_added_to_hass(self) -> None:
+        """Apply a newer duration display unit to entities still on raw seconds."""
+        await super().async_added_to_hass()
+        self._adopt_duration_display_unit()
+
+    @callback
+    def _adopt_duration_display_unit(self) -> None:
+        """Move a duration sensor off the original seconds suggestion.
+
+        Home Assistant stores ``suggested_unit_of_measurement`` the first time
+        an entity is seen and does not refresh it. Entities created before the
+        minutes/hours suggestion keep showing seconds unless the user already
+        chose a unit.
+        """
+        suggested = self.entity_description.suggested_unit_of_measurement
+        entry = self.registry_entry
+        if (
+            suggested is None
+            or entry is None
+            or self.entity_description.device_class is not SensorDeviceClass.DURATION
+        ):
+            return
+        if _UNIT_OF_MEASUREMENT in entry.options.get(_SENSOR_OPTIONS, {}):
+            return
+        private = dict(entry.options.get(_SENSOR_PRIVATE, {}))
+        stored = private.get("suggested_unit_of_measurement")
+        if stored == suggested or stored not in (None, UnitOfTime.SECONDS):
+            return
+        private["suggested_unit_of_measurement"] = suggested
+        er.async_get(self.hass).async_update_entity_options(
+            entry.entity_id,
+            _SENSOR_PRIVATE,
+            private,
+        )
 
     @property
     def native_value(self) -> float | str | None:
