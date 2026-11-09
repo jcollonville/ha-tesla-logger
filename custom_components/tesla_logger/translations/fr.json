@@ -1,0 +1,140 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion à tesla-logger",
+        "description": "Le serveur est en lecture seule. Créez un jeton API (tl_...) sur sa page de statut. Le jeton reste dans Home Assistant et n'est pas envoyé au navigateur.",
+        "data": {
+          "url": "URL du serveur",
+          "token": "Jeton API"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Réauthentification",
+        "description": "Le jeton API de {name} a été refusé. Collez un nouveau jeton depuis la page de statut de tesla-logger.",
+        "data": {
+          "token": "Jeton API"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de contacter le serveur",
+      "invalid_auth": "Jeton API invalide",
+      "invalid_url": "Saisissez une URL http ou https sans mot de passe",
+      "unknown": "Erreur inattendue"
+    },
+    "abort": {
+      "already_configured": "Ce serveur est déjà configuré",
+      "reauth_successful": "Authentification mise à jour"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Paramètres d'interrogation",
+        "description": "Le WebSocket pousse l'état en direct. L'interrogation REST complète les champs absents du socket et sert de repli s'il est coupé.",
+        "data": {
+          "scan_interval": "Intervalle d'interrogation REST",
+          "websocket": "Activer le WebSocket temps réel"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_level": { "name": "Batterie" },
+      "usable_battery_level": { "name": "Batterie utilisable" },
+      "rated_range": { "name": "Autonomie" },
+      "ideal_range": { "name": "Autonomie idéale" },
+      "estimated_range": { "name": "Autonomie estimée" },
+      "odometer": { "name": "Odomètre" },
+      "speed": { "name": "Vitesse" },
+      "power": { "name": "Puissance" },
+      "inside_temp": { "name": "Température intérieure" },
+      "outside_temp": { "name": "Température extérieure" },
+      "charging_state": { "name": "État de charge" },
+      "charger_power": { "name": "Puissance de charge" },
+      "charger_voltage": { "name": "Tension de charge" },
+      "charger_current": { "name": "Courant de charge" },
+      "energy_added": { "name": "Énergie ajoutée" },
+      "charge_limit": { "name": "Limite de charge" },
+      "activity": { "name": "État" },
+      "software_version": { "name": "Version logicielle" },
+      "update_status": { "name": "État de mise à jour" },
+      "shift_state": { "name": "Rapport" },
+      "geofence": { "name": "Géorepérage" },
+      "heading": { "name": "Cap" },
+      "last_error": { "name": "Dernière erreur" },
+      "last_drive_distance": { "name": "Distance du dernier trajet" },
+      "last_drive_duration": { "name": "Durée du dernier trajet" },
+      "last_drive_energy": { "name": "Énergie du dernier trajet" },
+      "last_drive_efficiency": { "name": "Efficacité du dernier trajet" },
+      "last_charge_energy": { "name": "Énergie de la dernière charge" },
+      "last_charge_duration": { "name": "Durée de la dernière charge" },
+      "tpms_front_left": { "name": "Pression pneu avant gauche" },
+      "tpms_front_right": { "name": "Pression pneu avant droit" },
+      "tpms_rear_left": { "name": "Pression pneu arrière gauche" },
+      "tpms_rear_right": { "name": "Pression pneu arrière droit" }
+    },
+    "binary_sensor": {
+      "plugged_in": { "name": "Branché" },
+      "lock": { "name": "Verrouillage" },
+      "sentry": { "name": "Mode Sentinelle" },
+      "door_front_left": { "name": "Porte avant gauche" },
+      "door_front_right": { "name": "Porte avant droite" },
+      "door_rear_left": { "name": "Porte arrière gauche" },
+      "door_rear_right": { "name": "Porte arrière droite" },
+      "window_front_left": { "name": "Fenêtre avant gauche" },
+      "window_front_right": { "name": "Fenêtre avant droite" },
+      "window_rear_left": { "name": "Fenêtre arrière gauche" },
+      "window_rear_right": { "name": "Fenêtre arrière droite" },
+      "frunk": { "name": "Coffre avant" },
+      "trunk": { "name": "Coffre" }
+    },
+    "device_tracker": {
+      "location": { "name": "Position" }
+    }
+  },
+  "services": {
+    "get_drives": {
+      "name": "Obtenir les trajets",
+      "description": "Retourne une page de trajets depuis tesla-logger.",
+      "fields": {
+        "device_id": { "name": "Véhicule", "description": "Véhicule Tesla Logger." },
+        "from": { "name": "Depuis", "description": "Trajets commencés à partir de cette date." },
+        "to": { "name": "Jusqu'à", "description": "Trajets commencés avant cette date." },
+        "page": { "name": "Page", "description": "Numéro de page, à partir de 1." },
+        "per_page": { "name": "Par page", "description": "Taille de page, de 1 à 100." }
+      }
+    },
+    "get_drive": {
+      "name": "Obtenir un trajet",
+      "description": "Retourne un trajet, avec son tracé simplifié et sa série temporelle.",
+      "fields": {
+        "device_id": { "name": "Véhicule", "description": "Véhicule Tesla Logger." },
+        "drive_id": { "name": "ID du trajet", "description": "Identifiant du trajet sur le serveur." },
+        "max_points": { "name": "Points max", "description": "Nombre maximal de points (2-2000)." }
+      }
+    },
+    "get_charges": {
+      "name": "Obtenir les charges",
+      "description": "Retourne une page de sessions de charge depuis tesla-logger.",
+      "fields": {
+        "device_id": { "name": "Véhicule", "description": "Véhicule Tesla Logger." },
+        "from": { "name": "Depuis", "description": "Charges commencées à partir de cette date." },
+        "to": { "name": "Jusqu'à", "description": "Charges commencées avant cette date." },
+        "page": { "name": "Page", "description": "Numéro de page, à partir de 1." },
+        "per_page": { "name": "Par page", "description": "Taille de page, de 1 à 100." }
+      }
+    },
+    "get_stats": {
+      "name": "Obtenir les statistiques",
+      "description": "Retourne les totaux de trajets et de charges sur une période.",
+      "fields": {
+        "device_id": { "name": "Véhicule", "description": "Véhicule Tesla Logger." },
+        "from": { "name": "Depuis", "description": "Début de la période." },
+        "to": { "name": "Jusqu'à", "description": "Fin de la période." }
+      }
+    }
+  }
+}
