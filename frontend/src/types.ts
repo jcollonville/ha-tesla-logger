@@ -19,6 +19,7 @@ export interface HomeAssistant {
   devices?: Record<string, DeviceRegistryEntry>;
   locale?: { language?: string };
   language?: string;
+  themes?: { darkMode?: boolean };
   callService(
     domain: string,
     service: string,
