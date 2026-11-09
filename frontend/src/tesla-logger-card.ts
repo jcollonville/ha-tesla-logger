@@ -793,10 +793,17 @@ export class TeslaLoggerCard extends LitElement {
     }
     if (!this.map) {
       this.map = L.map(el, { zoomControl: true, attributionControl: true });
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
+      const dark = Boolean(this.hass?.themes?.darkMode);
+      const tiles = dark
+        ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+      L.tileLayer(tiles, {
+        subdomains: "abcd",
+        maxZoom: 20,
+        referrerPolicy: "origin",
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
+          '&copy; <a href="https://carto.com/attributions">CARTO</a>',
       }).addTo(this.map);
       this.mapEl = el;
     }
