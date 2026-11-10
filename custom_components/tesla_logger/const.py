@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
+from pathlib import Path
 from typing import Final
 
 from homeassistant.const import Platform
 
 DOMAIN: Final = "tesla_logger"
 CARD_PATH: Final = "/tesla_logger/tesla-logger-card.js"
-CARD_VERSION: Final = "0.1.6"
+
+
+def _manifest_version() -> str:
+    """Return the manifest version used to cache-bust the Lovelace card."""
+    manifest = json.loads((Path(__file__).parent / "manifest.json").read_text(encoding="utf-8"))
+    version = manifest["version"]
+    if not isinstance(version, str) or not version:
+        raise RuntimeError("manifest.json version must be a non-empty string")
+    return version
+
+
+CARD_VERSION: Final = _manifest_version()
+CARD_URL: Final = f"{CARD_PATH}?v={CARD_VERSION}"
 
 CONF_URL: Final = "url"
 CONF_TOKEN: Final = "token"

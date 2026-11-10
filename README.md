@@ -6,7 +6,7 @@ The card loads automatically with the integration. History requests go through H
 
 ## Requirements
 
-- Home Assistant 2025.1 or newer
+- Home Assistant 2024.11 or newer
 - A reachable tesla-logger server (for example `http://192.168.10.50:8099`)
 - An API token created on the server status page (`tl_...`)
 
@@ -14,9 +14,15 @@ Distances from the server are kilometres. The integration reports metric units a
 
 ## Install with HACS
 
-1. In HACS, choose **Integrations**, then **Custom repositories**.
-2. Add `https://github.com/jcollonville/ha-tesla-logger` as an Integration.
+1. In HACS, open **Custom repositories**.
+2. Add `https://github.com/jcollonville/ha-tesla-logger` with category **Integration**.
 3. Download **Tesla Logger** and restart Home Assistant.
+
+HACS installs the `custom_components/tesla_logger` folder from the GitHub release. The Lovelace card is inside that folder and is served by the integration, so no dashboard resource is required. An update replaces the integration and the card together.
+
+## Updating
+
+When a newer release exists, HACS shows an update for **Tesla Logger**. Install it and restart Home Assistant. The integration registers the card as `/tesla_logger/tesla-logger-card.js?v=<version>`, where `<version>` is `version` from `manifest.json`, so the browser loads the card that shipped with that release.
 
 ## Manual install
 
@@ -137,6 +143,12 @@ npm run build
 CI checks that `custom_components/tesla_logger/www/tesla-logger-card.js` matches the build.
 
 Tests use a local fake of the read API. They do not talk to a live tesla-logger server.
+
+## Release a change
+
+1. Bump `version` in `custom_components/tesla_logger/manifest.json`. The card cache-buster reads that value. Keep the same version in `pyproject.toml` and `frontend/package.json`.
+2. Merge to `main`.
+3. The release workflow tags `v<version>` and publishes a GitHub Release with generated notes when that tag does not already exist.
 
 ## License
 
