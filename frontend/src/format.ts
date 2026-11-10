@@ -1,5 +1,5 @@
 import type { Lang } from "./i18n";
-import type { Period } from "./types";
+import type { Charge, Drive, Period } from "./types";
 
 export function formatNumber(value: number, digits: number, lang: Lang): string {
   return value.toLocaleString(lang === "fr" ? "fr-FR" : "en-US", {
@@ -72,6 +72,130 @@ export function formatDuration(seconds: number | null | undefined): string {
     return `${hours} h ${minutes} min`;
   }
   return `${minutes} min`;
+}
+
+export interface HistoryRowModel {
+  datetime: string;
+  when: string;
+  place: string | null;
+  figure: string | null;
+  detail: string;
+}
+
+function trimmedText(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function finite(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** "70 → 64 %" when both ends exist, otherwise the one known percentage. */
+export function socRange(
+  start: number | null | undefined,
+  end: number | null | undefined,
+  lang: Lang,
+): string | null {
+  const from = finite(start);
+  const to = finite(end);
+  if (from == null && to == null) {
+    return null;
+  }
+  if (from != null && to != null) {
+    return `${formatNumber(from, 0, lang)} → ${formatNumber(to, 0, lang)} %`;
+  }
+  return `${formatNumber((from ?? to) as number, 0, lang)} %`;
+}
+
+/** Start timestamp, with the end time when the trip or charge has one. */
+export function formatListRange(start: string, end: string | null | undefined, lang: Lang): string {
+  const startText = formatListTimestamp(start, lang);
+  if (!end) {
+    return startText;
+  }
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return startText;
+  }
+  const sameDay =
+    startDate.getFullYear() === endDate.getFullYear() &&
+    startDate.getMonth() === endDate.getMonth() &&
+    startDate.getDate() === endDate.getDate();
+  if (!sameDay) {
+    return `${startText} – ${formatListTimestamp(end, lang)}`;
+  }
+  const locale = lang === "fr" ? "fr-FR" : "en-US";
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+    .format(endDate)
+    .replace(/[\u00a0\u202f]/g, " ")
+    .trim();
+  return `${startText}–${time}`;
+}
+
+function kwh(value: number | null | undefined, lang: Lang): string | null {
+  const energy = finite(value);
+  return energy == null ? null : `${formatNumber(energy, 1, lang)} kWh`;
+}
+
+export function driveHistory(drive: Drive, lang: Lang): HistoryRowModel {
+  const start = trimmedText(drive.start_address);
+  const end = trimmedText(drive.end_address);
+  const place = start && end ? `${start} → ${end}` : start || end;
+  const efficiency = whPerKm(drive.energy_used_kwh, drive.distance_km);
+  const soc = socRange(drive.start_battery_level, drive.end_battery_level, lang);
+  const detail = detailLine([
+    finite(drive.duration_s) == null ? null : formatDuration(drive.duration_s),
+    efficiency == null ? null : `${formatNumber(efficiency, 0, lang)} Wh/km`,
+    soc ?? kwh(drive.energy_used_kwh, lang),
+  ]);
+  const distance = finite(drive.distance_km);
+  return {
+    datetime: drive.start_at,
+    when: formatListRange(drive.start_at, drive.end_at, lang),
+    place,
+    figure: distance == null ? null : `${formatNumber(distance, 1, lang)} km`,
+    detail,
+  };
+}
+
+function chargeKind(charge: Charge): "AC" | "DC" | null {
+  if (charge.is_dc === true) {
+    return "DC";
+  }
+  if (charge.is_dc === false) {
+    return "AC";
+  }
+  const type = displayChargerType(charge.charger_type);
+  return type === "AC" || type === "DC" ? type : null;
+}
+
+export function chargeHistory(charge: Charge, lang: Lang): HistoryRowModel {
+  const named =
+    trimmedText(charge.address) || trimmedText(charge.geofence) || trimmedText(charge.location);
+  const type = displayChargerType(charge.charger_type);
+  const descriptive = type && type !== "AC" && type !== "DC" ? type : null;
+  const power = finite(charge.max_power_kw);
+  const detail = detailLine([
+    finite(charge.duration_s) == null ? null : formatDuration(charge.duration_s),
+    socRange(charge.start_battery_level, charge.end_battery_level, lang),
+    power == null ? null : `${formatNumber(power, 0, lang)} kW`,
+    chargeKind(charge),
+  ]);
+  return {
+    datetime: charge.start_at,
+    when: formatListRange(charge.start_at, charge.end_at, lang),
+    place: named || descriptive,
+    figure: kwh(charge.energy_added_kwh, lang),
+    detail,
+  };
 }
 
 export function whPerKm(

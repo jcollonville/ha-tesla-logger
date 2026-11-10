@@ -1,6 +1,7 @@
 import * as L from "leaflet";
 import leafletCss from "leaflet/dist/leaflet.css?inline";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
+import { ref } from "lit/directives/ref.js";
 import { activityLabel, copy, language, type Copy, type Lang } from "./i18n";
 import {
   bucketLabel,
@@ -14,15 +15,16 @@ import {
 import {
   asRecord,
   bucketInPeriod,
-  detailLine,
-  displayChargerType,
+  chargeHistory,
+  driveHistory,
   formatDuration,
-  formatListTimestamp,
   formatNumber,
   periodRange,
   safeError,
   whPerKm,
+  type HistoryRowModel,
 } from "./format";
+import { readPosition, tilesForView } from "./mini-map";
 import {
   SHOW_DEFAULTS,
   SHOW_KEYS,
@@ -99,6 +101,8 @@ export class TeslaLoggerCard extends LitElement {
     _page: { state: true },
     _loading: { state: true },
     _error: { state: true },
+    _plotWidths: { state: true },
+    _headerBox: { state: true },
   };
 
   hass?: HomeAssistant;
@@ -117,6 +121,9 @@ export class TeslaLoggerCard extends LitElement {
   private _loading = false;
   private _error = "";
   private _driveId?: number;
+  private _plotWidths: Record<string, number> = {};
+  private _headerBox = { width: 0, height: 0 };
+  private _resize?: ResizeObserver;
   private map?: L.Map;
   private mapEl?: HTMLDivElement;
   private routeLayer?: L.LayerGroup;
@@ -130,12 +137,57 @@ export class TeslaLoggerCard extends LitElement {
       ha-card {
         padding-bottom: 8px;
       }
+      .header-wrap {
+        position: relative;
+        overflow: hidden;
+      }
       .header {
+        position: relative;
+        z-index: 1;
         display: grid;
         grid-template-columns: 72px 1fr;
         gap: 12px;
         align-items: center;
         padding: 16px 16px 8px;
+      }
+      .map-bg {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        overflow: hidden;
+        pointer-events: none;
+        user-select: none;
+      }
+      .map-bg img {
+        position: absolute;
+        width: 256px;
+        height: 256px;
+        filter: grayscale(1);
+        opacity: 0.22;
+        pointer-events: none;
+      }
+      .map-bg.dark img {
+        filter: invert(1) hue-rotate(180deg) grayscale(1) brightness(0.85);
+        opacity: 0.2;
+      }
+      .map-dot {
+        position: absolute;
+        z-index: 2;
+        width: 8px;
+        height: 8px;
+        margin-left: -4px;
+        margin-top: -4px;
+        border-radius: 50%;
+        background: #c62828;
+        box-shadow: 0 0 0 1.5px #fff;
+      }
+      .map-credit {
+        position: absolute;
+        right: 8px;
+        bottom: 4px;
+        color: var(--secondary-text-color, #666);
+        font-size: 9px;
+        line-height: 1;
       }
       .ring {
         width: 72px;
@@ -224,7 +276,10 @@ export class TeslaLoggerCard extends LitElement {
       .list {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 0;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 560px;
         margin: 0;
         padding: 0 12px 4px;
         list-style: none;
@@ -232,18 +287,44 @@ export class TeslaLoggerCard extends LitElement {
       .entry {
         display: flex;
         flex-direction: column;
-        gap: 1px;
+        gap: 2px;
         box-sizing: border-box;
         width: 100%;
         min-width: 0;
         max-width: 100%;
         margin: 0;
-        padding: 5px 8px;
+        padding: 7px 4px;
         border: 0;
-        border-radius: 8px;
-        background: var(--secondary-background-color, rgba(127, 127, 127, 0.16));
+        border-bottom: 1px solid var(--divider-color, rgba(127, 127, 127, 0.35));
+        border-radius: 0;
+        background: transparent;
         color: var(--primary-text-color, #212121);
         text-align: left;
+      }
+      .entry-line {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 12px;
+        align-items: baseline;
+        min-width: 0;
+      }
+      .entry-main {
+        min-width: 0;
+        overflow: hidden;
+        color: var(--primary-text-color, #212121);
+        font-size: 0.92rem;
+        font-weight: 600;
+        line-height: 1.25;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .entry-figure {
+        color: var(--primary-text-color, #212121);
+        font-size: 0.92rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.25;
+        white-space: nowrap;
       }
       button.entry {
         font: inherit;
@@ -262,19 +343,14 @@ export class TeslaLoggerCard extends LitElement {
         outline: 2px solid var(--primary-color, #03a9f4);
         outline-offset: 2px;
       }
-      .entry-when {
-        color: var(--primary-text-color, #212121);
-        font-size: 0.92rem;
-        font-weight: 700;
-        line-height: 1.25;
-      }
       .entry-meta {
         display: block;
         min-width: 0;
         max-width: 100%;
         overflow: hidden;
         color: var(--secondary-text-color);
-        font-size: 0.8rem;
+        font-size: 0.75rem;
+        font-weight: 400;
         line-height: 1.3;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -327,9 +403,12 @@ export class TeslaLoggerCard extends LitElement {
         color: var(--secondary-text-color);
         font-size: 0.8rem;
       }
+      .plot {
+        width: 100%;
+        min-width: 0;
+      }
       .series-chart {
         width: 100%;
-        height: auto;
         display: block;
       }
       .series-chart .grid {
@@ -358,6 +437,12 @@ export class TeslaLoggerCard extends LitElement {
         stroke-width: 2;
         stroke-linejoin: round;
         stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
+      }
+      .series-chart .grid,
+      .series-chart .dot,
+      .series-chart .bar {
+        vector-effect: non-scaling-stroke;
       }
       .series-chart .dot {
         fill: var(--primary-color, #03a9f4);
@@ -463,17 +548,20 @@ export class TeslaLoggerCard extends LitElement {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 560px;
       }
       @media (max-width: 420px) {
         .header {
           grid-template-columns: 64px 1fr;
         }
         .list {
-          gap: 3px;
+          gap: 0;
           padding: 0 8px 4px;
         }
         .entry {
-          padding: 4px 8px;
+          padding: 6px 2px;
         }
         .totals-row {
           gap: 4px;
@@ -527,10 +615,67 @@ export class TeslaLoggerCard extends LitElement {
     return 6;
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (typeof ResizeObserver !== "function") {
+      return;
+    }
+    this._resize = new ResizeObserver((entries) => {
+      const measured = entries.map((entry) => {
+        const target = entry.target as HTMLElement;
+        return {
+          plot: target.dataset.plot,
+          mapHost: target.dataset.mapHost != null,
+          width: Math.round(entry.contentRect.width),
+          height: Math.round(entry.contentRect.height),
+        };
+      });
+      queueMicrotask(() => {
+        if (!this._resize) {
+          return;
+        }
+        let plots = this._plotWidths;
+        let plotsChanged = false;
+        let header = this._headerBox;
+        let headerChanged = false;
+        for (const entry of measured) {
+          if (entry.plot) {
+            if (entry.width > 0 && plots[entry.plot] !== entry.width) {
+              if (!plotsChanged) {
+                plots = { ...plots };
+                plotsChanged = true;
+              }
+              plots[entry.plot] = entry.width;
+            }
+            continue;
+          }
+          if (entry.mapHost && (header.width !== entry.width || header.height !== entry.height)) {
+            header = { width: entry.width, height: entry.height };
+            headerChanged = true;
+          }
+        }
+        if (plotsChanged) {
+          this._plotWidths = plots;
+        }
+        if (headerChanged) {
+          this._headerBox = header;
+        }
+      });
+    });
+  }
+
   override disconnectedCallback(): void {
+    this._resize?.disconnect();
+    this._resize = undefined;
     this.destroyMap();
     super.disconnectedCallback();
   }
+
+  private readonly watchSize = (element: Element | undefined): void => {
+    if (element) {
+      this._resize?.observe(element);
+    }
+  };
 
   override updated(changed: Map<string, unknown>): void {
     if (changed.has("_view") || changed.has("_config")) {
@@ -629,45 +774,80 @@ export class TeslaLoggerCard extends LitElement {
     const deviceName = this.deviceId ? this.hass?.devices?.[this.deviceId]?.name : undefined;
     const friendly = this.hass?.states[this._config?.entity || ""]?.attributes.friendly_name;
     const name = deviceName || (typeof friendly === "string" ? friendly : this.text.unknown);
+    const fence = this.label("geofence");
+    const rangeText = range == null ? "—" : `${formatNumber(range, 0, this.cardLang)} km`;
     return html`
-      <div class="header">
-        <svg class="ring" viewBox="0 0 36 36" aria-label="${shown}%">
-          <circle class="track" cx="18" cy="18" r="15.5"></circle>
-          <circle
-            class="value"
-            cx="18"
-            cy="18"
-            r="15.5"
-            pathLength="100"
-            stroke-dasharray="${dash} 100"
-          ></circle>
-          <text x="18" y="20">${shown}</text>
-        </svg>
-        <div>
-          <p class="name">${name}</p>
-          <p class="sub">
-            ${this.text.range}
-            ${range == null ? "—" : `${formatNumber(range, 0, this.cardLang)} km`}
-            · ${this.locationText()}
-          </p>
-          <span class="pill">${activityLabel(this.text, activity)}</span>
+      <div class="header-wrap" data-map-host ${ref(this.watchSize)}>
+        ${this.watermark()}
+        <div class="header">
+          <svg class="ring" viewBox="0 0 36 36" aria-label="${shown}%">
+            <circle class="track" cx="18" cy="18" r="15.5"></circle>
+            <circle
+              class="value"
+              cx="18"
+              cy="18"
+              r="15.5"
+              pathLength="100"
+              stroke-dasharray="${dash} 100"
+            ></circle>
+            <text x="18" y="20">${shown}</text>
+          </svg>
+          <div>
+            <p class="name">${name}</p>
+            <p class="sub">
+              ${this.text.range}
+              ${rangeText}${fence ? html` · ${fence}` : nothing}
+            </p>
+            <span class="pill">${activityLabel(this.text, activity)}</span>
+          </div>
         </div>
       </div>
     `;
   }
 
-  private locationText(): string {
-    const fence = this.label("geofence");
-    if (fence) {
-      return fence;
-    }
+  private mapEnabled(): boolean {
+    return this._config?.show_map !== false;
+  }
+
+  private carPosition(): { lat: number; lon: number } | null {
     const tracker = this.readings.get("location");
-    const lat = tracker?.attributes.latitude;
-    const lon = tracker?.attributes.longitude;
-    if (typeof lat === "number" && typeof lon === "number") {
-      return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    return readPosition(tracker?.attributes.latitude, tracker?.attributes.longitude);
+  }
+
+  private watermark() {
+    if (!this.mapEnabled()) {
+      return nothing;
     }
-    return this.text.unknown;
+    const position = this.carPosition();
+    const { width, height } = this._headerBox;
+    if (!position || width < 32 || height < 32) {
+      return nothing;
+    }
+    const view = tilesForView(position.lat, position.lon, width, height);
+    const dark = Boolean(this.hass?.themes?.darkMode);
+    return html`
+      <div class=${dark ? "map-bg dark" : "map-bg"} aria-hidden="true">
+        ${view.tiles.map(
+          (tile) => html`
+            <img
+              alt=""
+              width="256"
+              height="256"
+              src=${tile.url}
+              referrerpolicy="strict-origin-when-cross-origin"
+              style=${`left:${tile.left}px;top:${tile.top}px`}
+              draggable="false"
+            />
+          `,
+        )}
+        <span class="map-credit">© OpenStreetMap</span>
+      </div>
+      <span
+        class="map-dot"
+        aria-hidden="true"
+        style=${`left:${view.dot.left}px;top:${view.dot.top}px`}
+      ></span>
+    `;
   }
 
   private tab(view: ViewName, label: string) {
@@ -743,9 +923,7 @@ export class TeslaLoggerCard extends LitElement {
       </div>
       <ul class="list">
         ${(page?.data || []).map((drive) =>
-          this.historyEntry(drive.start_at, this.driveDetails(drive), () =>
-            this.openDrive(drive.id),
-          ),
+          this.historyRow(driveHistory(drive, this.cardLang), () => this.openDrive(drive.id)),
         )}
       </ul>
       ${page && page.data.length === 0 ? html`<p class="message">${this.text.emptyDrives}</p>` : nothing}
@@ -793,7 +971,7 @@ export class TeslaLoggerCard extends LitElement {
       </div>
       <ul class="list">
         ${(page?.data || []).map((charge) =>
-          this.historyEntry(charge.start_at, this.chargeDetails(charge)),
+          this.historyRow(chargeHistory(charge, this.cardLang)),
         )}
       </ul>
       ${page && page.data.length === 0
@@ -867,6 +1045,7 @@ export class TeslaLoggerCard extends LitElement {
             <div class="series-list">
               ${show.chart_consumption
                 ? this.seriesFigure(
+                    "consumption",
                     "line",
                     this.text.consumptionChart,
                     "Wh/km",
@@ -876,6 +1055,7 @@ export class TeslaLoggerCard extends LitElement {
                 : nothing}
               ${show.chart_distance
                 ? this.seriesFigure(
+                    "distance",
                     "bar",
                     this.text.distance,
                     "km",
@@ -885,6 +1065,7 @@ export class TeslaLoggerCard extends LitElement {
                 : nothing}
               ${show.chart_energy
                 ? this.seriesFigure(
+                    "energy",
                     "bar",
                     this.text.chargedChart,
                     "kWh",
@@ -901,6 +1082,7 @@ export class TeslaLoggerCard extends LitElement {
             <div class="series-extra">
               ${show.battery_health && selected >= 0
                 ? this.seriesFigure(
+                    "health",
                     "line",
                     this.text.batteryHealth,
                     "km",
@@ -912,6 +1094,7 @@ export class TeslaLoggerCard extends LitElement {
               ${show.charging_split && selected >= 0 ? this.acDcFigure(buckets, selected) : nothing}
               ${show.vampire_drain && selected >= 0
                 ? this.seriesFigure(
+                    "idle",
                     "bar",
                     this.text.idleUse,
                     "km/j",
@@ -985,6 +1168,7 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   private seriesFigure(
+    plotKey: string,
     kind: "bar" | "line" | "stack",
     title: string,
     unit: string,
@@ -1011,7 +1195,7 @@ export class TeslaLoggerCard extends LitElement {
           <span class="series-title">${title}</span>
           <span class="series-value">${headline} ${focusText}</span>
         </figcaption>
-        ${this.drawSeries(points, kind, summary, selected, compact)}
+        ${this.drawSeries(plotKey, points, kind, summary, selected, compact)}
       </figure>
     `;
   }
@@ -1055,7 +1239,7 @@ export class TeslaLoggerCard extends LitElement {
           <span><i class="swatch ac" aria-hidden="true"></i>AC</span>
           <span><i class="swatch dc" aria-hidden="true"></i>DC</span>
         </p>
-        ${this.drawSeries(points, "stack", summary, selected, true)}
+        ${this.drawSeries("acdc", points, "stack", summary, selected, true)}
       </figure>
     `;
   }
@@ -1078,13 +1262,14 @@ export class TeslaLoggerCard extends LitElement {
           <span class="series-title">${this.text.tempUse}</span>
         </figcaption>
         ${points.length
-          ? this.drawSeries(points, "bar", this.text.tempUse, -1, true, false)
+          ? this.drawSeries("temp", points, "bar", this.text.tempUse, -1, true, false)
           : html`<p class="message">${this.text.emptySeries}</p>`}
       </figure>
     `;
   }
 
   private drawSeries(
+    plotKey: string,
     points: ChartPoint[],
     kind: "bar" | "line" | "stack",
     label: string,
@@ -1094,11 +1279,16 @@ export class TeslaLoggerCard extends LitElement {
   ) {
     const formatTick = (value: number) =>
       formatNumber(value, value >= 10 || value === 0 ? 0 : 1, this.cardLang);
-    return seriesChart(points, kind, label, formatTick, {
-      compact,
-      selected,
-      onSelect: selectable ? (index) => this.selectBucket(index) : undefined,
-    });
+    return html`
+      <div class="plot" data-plot=${plotKey} ${ref(this.watchSize)}>
+        ${seriesChart(points, kind, label, formatTick, {
+          width: this._plotWidths[plotKey],
+          compact,
+          selected,
+          onSelect: selectable ? (index) => this.selectBucket(index) : undefined,
+        })}
+      </div>
+    `;
   }
 
   private chart(
@@ -1137,18 +1327,17 @@ export class TeslaLoggerCard extends LitElement {
     `;
   }
 
-  private historyEntry(
-    startAt: string,
-    details: Array<string | null | undefined>,
-    onOpen?: () => void,
-  ) {
-    const meta = detailLine(details);
-    const body = html`
-      <strong class="entry-when">
-        <time datetime=${startAt}>${formatListTimestamp(startAt, this.cardLang)}</time>
-      </strong>
-      ${meta ? html`<span class="entry-meta" title=${meta}>${meta}</span>` : nothing}
-    `;
+  private historyRow(row: HistoryRowModel, onOpen?: () => void) {
+    const main = row.place ? `${row.when} · ${row.place}` : row.when;
+    const body = html`<span class="entry-line"
+        ><span class="entry-main" title=${main}
+          ><time datetime=${row.datetime}>${row.when}</time>${row.place
+            ? ` · ${row.place}`
+            : nothing}</span
+        ><strong class="entry-figure">${row.figure ?? "—"}</strong></span
+      >${row.detail
+        ? html`<span class="entry-meta" title=${row.detail}>${row.detail}</span>`
+        : nothing}`;
     if (onOpen) {
       return html`
         <li>
@@ -1157,39 +1346,6 @@ export class TeslaLoggerCard extends LitElement {
       `;
     }
     return html`<li><div class="entry">${body}</div></li>`;
-  }
-
-  private driveDetails(drive: Drive): Array<string | null> {
-    const efficiency = whPerKm(drive.energy_used_kwh, drive.distance_km);
-    const start = this.place(drive.start_address);
-    const end = this.place(drive.end_address);
-    const route = start && end ? `${start} → ${end}` : start || end;
-    return [
-      drive.duration_s == null ? null : formatDuration(drive.duration_s),
-      drive.distance_km == null ? null : this.km(drive.distance_km),
-      efficiency == null ? null : `${formatNumber(efficiency, 0, this.cardLang)} Wh/km`,
-      drive.energy_used_kwh == null ? null : this.kwh(drive.energy_used_kwh),
-      route,
-    ];
-  }
-
-  private chargeDetails(charge: Charge): Array<string | null> {
-    return [
-      charge.duration_s == null ? null : formatDuration(charge.duration_s),
-      charge.energy_added_kwh == null ? null : this.kwh(charge.energy_added_kwh),
-      charge.max_power_kw == null
-        ? null
-        : `${formatNumber(charge.max_power_kw, 0, this.cardLang)} kW`,
-      displayChargerType(charge.charger_type),
-    ];
-  }
-
-  private place(value: string | null | undefined): string | null {
-    if (typeof value !== "string") {
-      return null;
-    }
-    const trimmed = value.trim();
-    return trimmed || null;
   }
 
   private km(value: number | null | undefined): string {
@@ -1476,6 +1632,9 @@ function fieldLabel(name: string, text: Copy): string {
   if (key === "show") {
     return text.showBlocks;
   }
+  if (key === "show_map") {
+    return text.showMap;
+  }
   if (key in text.showFields) {
     return text.showFields[key as keyof typeof text.showFields];
   }
@@ -1487,6 +1646,10 @@ const SCHEMA = [
     name: "entity",
     required: true,
     selector: { entity: { integration: "tesla_logger" } },
+  },
+  {
+    name: "show_map",
+    selector: { boolean: {} },
   },
   {
     name: "default_view",
@@ -1520,7 +1683,7 @@ class TeslaLoggerCardEditor extends LitElement {
   private _config?: CardConfig;
 
   setConfig(config: CardConfig): void {
-    this._config = { ...config, show: showFlags(config) };
+    this._config = { ...config, show_map: config.show_map !== false, show: showFlags(config) };
   }
 
   override render() {

@@ -98,6 +98,7 @@ Add a **Tesla Logger** card and pick any entity from the vehicle. Every block is
 ```yaml
 type: custom:tesla-logger-card
 entity: sensor.red_location
+show_map: true
 show:
   drives: true
   charges: true
@@ -113,15 +114,17 @@ show:
 
 `status` can be set the same way. Omitted keys stay visible. The visual editor exposes the same toggles.
 
+`show_map` defaults to true. The header keeps the range and hides raw coordinates. When the vehicle device tracker has a latitude and longitude, the header shows a faint, desaturated, non-interactive OpenStreetMap centered on the car, with a small red dot. Set `show_map: false` to hide it. The card requests only the tiles visible in that header, at zoom 15, from `https://tile.openstreetmap.org/{z}/{x}/{y}.png`.
+
 The card has five views:
 
-- Status: battery, range, activity, location, and the main readings
+- Status: battery, range, activity, and the main readings, with the position map in the header when coordinates are known
 - Drives: distance, duration, and consumption, with a detail view
 - Drive detail: Leaflet map (OpenStreetMap tiles) of the RDP route, plus speed, elevation, and battery charts
 - Charges and week / month / year stats
 - Charts (Graphiques): consumption, distance, and energy charged for the same periods
 
-The map loads tiles in the browser from OpenStreetMap. The server token is not part of that request.
+Drive routes and the header watermark both load tiles in the browser from OpenStreetMap. The server token is not part of that request.
 
 ## Development
 

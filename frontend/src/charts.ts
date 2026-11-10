@@ -10,12 +10,36 @@ export const SERIES_COUNT: Record<Period, number> = {
   year: 5,
 };
 
-const CHART_WIDTH = 360;
-const CHART_HEIGHT = 168;
-const PLOT_LEFT = 42;
-const PLOT_RIGHT = 10;
-const PLOT_TOP = 12;
-const PLOT_BOTTOM = 28;
+/** Width below which charts use the shorter frame. */
+const NARROW_WIDTH = 480;
+
+export interface ChartFrame {
+  width: number;
+  height: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Pixel frame for a chart. Height stays in a fixed band so a wide popup
+ * cannot scale the drawing; 1 user unit is meant to match 1 CSS pixel.
+ */
+export function chartFrame(width: number | undefined, compact = false): ChartFrame {
+  const fallback = compact ? 200 : 360;
+  const safe = width != null && Number.isFinite(width) && width >= 64 ? width : fallback;
+  const narrow = safe < NARROW_WIDTH;
+  const height = compact ? (narrow ? 116 : 132) : narrow ? 184 : 208;
+  return {
+    width: safe,
+    height,
+    left: compact ? 32 : 42,
+    right: compact ? 8 : 12,
+    top: compact ? 8 : 12,
+    bottom: compact ? 22 : 28,
+  };
+}
 
 export interface ChartPoint {
   label: string;
@@ -71,6 +95,8 @@ export function bucketLabel(start: string, period: Period, lang: Lang): string {
 }
 
 export interface SeriesChartOptions {
+  /** Measured CSS width of the plot. Omit to use the narrow fallback. */
+  width?: number;
   selected?: number;
   onSelect?: (index: number) => void;
   compact?: boolean;
@@ -83,16 +109,7 @@ export function seriesChart(
   formatTick: (value: number) => string,
   options: SeriesChartOptions = {},
 ) {
-  const box = options.compact
-    ? { width: 200, height: 112, left: 32, right: 6, top: 8, bottom: 20 }
-    : {
-        width: CHART_WIDTH,
-        height: CHART_HEIGHT,
-        left: PLOT_LEFT,
-        right: PLOT_RIGHT,
-        top: PLOT_TOP,
-        bottom: PLOT_BOTTOM,
-      };
+  const box = chartFrame(options.width, options.compact);
   const magnitudes = points.map((point) => {
     if (kind === "stack") {
       return Math.max(0, point.value ?? 0) + Math.max(0, point.stack ?? 0);
@@ -231,9 +248,11 @@ export function seriesChart(
     <svg
       class=${options.compact ? "series-chart compact" : "series-chart"}
       viewBox=${`0 0 ${box.width} ${box.height}`}
+      width="100%"
+      height=${String(box.height)}
       role="group"
       aria-label=${label}
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio="xMinYMin meet"
     >
       ${ticks.map((tick) => {
         const y = yOf(tick);

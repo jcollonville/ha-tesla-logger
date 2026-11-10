@@ -34,6 +34,8 @@ export interface CardConfig {
   type?: string;
   entity: string;
   default_view?: ViewName;
+  /** Faint position map in the header. Omitted means shown. */
+  show_map?: boolean;
   show?: Partial<Record<string, boolean>>;
 }
 
@@ -47,6 +49,8 @@ export interface Drive {
   distance_km?: number | null;
   duration_s?: number | null;
   energy_used_kwh?: number | null;
+  start_battery_level?: number | null;
+  end_battery_level?: number | null;
   start_address?: string | null;
   end_address?: string | null;
 }
@@ -78,6 +82,11 @@ export interface Charge {
   max_power_kw?: number | null;
   charger_type?: string | null;
   is_dc?: boolean | null;
+  start_battery_level?: number | null;
+  end_battery_level?: number | null;
+  address?: string | null;
+  geofence?: string | null;
+  location?: string | null;
 }
 
 export interface Page<T> {

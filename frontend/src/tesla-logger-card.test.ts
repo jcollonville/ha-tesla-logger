@@ -65,6 +65,7 @@ afterEach(() => {
     card.remove();
   }
   mounted.length = 0;
+  vi.unstubAllGlobals();
 });
 
 function frenchHass(): HomeAssistant {
@@ -148,11 +149,15 @@ describe("history lists", () => {
     expect(list).toBeTruthy();
     const rows = Array.from(list?.querySelectorAll(".entry") ?? []);
     expect(rows).toHaveLength(4);
-    expect(rows[0].querySelector(".entry-when time")?.textContent).toBe("mar. 10 nov. 03:30");
-    expect(rows[0].querySelector(".entry-when time")?.getAttribute("datetime")).toBe(start);
-    expect(rows[0].querySelector(".entry-meta")?.textContent).toBe("40 min · 6,5 kWh · 11 kW · AC");
-    expect(rows[1].querySelector(".entry-meta")?.textContent).toBe("40 min · 6,5 kWh · 11 kW");
-    expect(rows[2].querySelector(".entry-meta")?.textContent).toBe("15 min · 1,0 kWh");
+    expect(rows[0].querySelector(".entry-main time")?.textContent).toBe("mar. 10 nov. 03:30");
+    expect(rows[0].querySelector(".entry-main time")?.getAttribute("datetime")).toBe(start);
+    expect(rows[0].querySelector(".entry-figure")?.textContent).toBe("6,5 kWh");
+    expect(rows[0].querySelector(".entry-meta")?.textContent).toBe("40 min · 11 kW · AC");
+    expect(rows[1].querySelector(".entry-figure")?.textContent).toBe("6,5 kWh");
+    expect(rows[1].querySelector(".entry-meta")?.textContent).toBe("40 min · 11 kW");
+    expect(rows[2].querySelector(".entry-figure")?.textContent).toBe("1,0 kWh");
+    expect(rows[2].querySelector(".entry-meta")?.textContent).toBe("15 min");
+    expect(rows[3].querySelector(".entry-figure")?.textContent).toBe("—");
     expect(rows[3].querySelector(".entry-meta")?.textContent).toBe("1 min");
     expect(list?.textContent).not.toContain("<invalid>");
     expect(list?.textContent?.toLowerCase()).not.toContain("none");
@@ -160,15 +165,23 @@ describe("history lists", () => {
     expect(list?.querySelector(".row")).toBeNull();
 
     const meta = rows[0].querySelector(".entry-meta");
-    expect(meta?.getAttribute("title")).toBe("40 min · 6,5 kWh · 11 kW · AC");
+    expect(meta?.getAttribute("title")).toBe("40 min · 11 kW · AC");
     const metaStyle = meta ? getComputedStyle(meta) : null;
     expect(metaStyle?.textOverflow).toBe("ellipsis");
     expect(metaStyle?.whiteSpace).toBe("nowrap");
+    const mainStyle = getComputedStyle(rows[0].querySelector(".entry-main") as Element);
+    expect(mainStyle.textOverflow).toBe("ellipsis");
+    expect(mainStyle.whiteSpace).toBe("nowrap");
+    const lineStyle = getComputedStyle(rows[0].querySelector(".entry-line") as Element);
+    expect(lineStyle.display).toBe("grid");
+    const listStyle = getComputedStyle(list as Element);
+    expect(listStyle.maxWidth).toBe("560px");
     const entryStyle = getComputedStyle(rows[0]);
     expect(parseFloat(entryStyle.paddingTop)).toBeLessThan(10);
+    expect(entryStyle.borderBottomStyle).toBe("solid");
   });
 
-  it("uses the same two-line row for drives and folds distance into the detail line", async () => {
+  it("uses a two-line drive row with distance on the right", async () => {
     const start = new Date(2026, 10, 9, 8, 0).toISOString();
     const card = await showList("drives", {
       page: 1,
@@ -196,16 +209,108 @@ describe("history lists", () => {
     const rows = Array.from(card.shadowRoot?.querySelectorAll("ul.list .entry") ?? []);
     expect(rows).toHaveLength(2);
     expect(rows[0].tagName).toBe("BUTTON");
-    expect(rows[0].querySelector(".entry-when time")?.textContent).toBe("lun. 9 nov. 08:00");
-    expect(rows[0].querySelector(".entry-meta")?.textContent).toBe(
-      "30 min · 18,4 km · 174 Wh/km · 3,2 kWh · Maison → Bureau",
-    );
+    expect(rows[0].querySelector(".entry-main time")?.textContent).toBe("lun. 9 nov. 08:00");
+    expect(rows[0].querySelector(".entry-main")?.textContent).toBe("lun. 9 nov. 08:00 · Maison → Bureau");
+    expect(rows[0].querySelector(".entry-figure")?.textContent).toBe("18,4 km");
+    expect(rows[0].querySelector(".entry-meta")?.textContent).toBe("30 min · 174 Wh/km · 3,2 kWh");
+    expect(rows[1].querySelector(".entry-figure")?.textContent).toBe("—");
     expect(rows[1].querySelector(".entry-meta")?.textContent).toBe("10 min · 1,5 kWh");
     expect(rows[0].querySelector(".row")).toBeNull();
 
     rows[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await card.updateComplete;
     expect((card as unknown as { _view: string })._view).toBe("drive");
+  });
+});
+
+describe("header map", () => {
+  function trackerHass(latitude?: number, longitude?: number): HomeAssistant {
+    const hass = frenchHass();
+    hass.states["sensor.tesla_location"] = {
+      state: "home",
+      attributes: { friendly_name: "Red", vin: "V" },
+    };
+    hass.states["sensor.red_range"] = {
+      state: "328",
+      attributes: { key: "rated_range", vin: "V" },
+    };
+    hass.states["sensor.red_fence"] = {
+      state: "Maison",
+      attributes: { key: "geofence", vin: "V" },
+    };
+    hass.states["device_tracker.red"] = {
+      state: "not_home",
+      attributes: {
+        key: "location",
+        vin: "V",
+        ...(latitude == null ? {} : { latitude, longitude }),
+      },
+    };
+    return hass;
+  }
+
+  async function mountHeader(hass: HomeAssistant, showMap?: boolean): Promise<TeslaLoggerCard> {
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    card.hass = hass;
+    card.setConfig({
+      entity: "sensor.tesla_location",
+      ...(showMap == null ? {} : { show_map: showMap }),
+    });
+    await card.updateComplete;
+    await card.updateComplete;
+    return card;
+  }
+
+  it("drops coordinates, keeps the range, and paints only the visible tiles", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly cb: ResizeObserverCallback) {}
+        observe(target: Element): void {
+          const host = target as HTMLElement;
+          const rect = host.dataset.mapHost != null
+            ? { width: 360, height: 96, top: 0, left: 0, bottom: 96, right: 360, x: 0, y: 0 }
+            : { width: 1600, height: 208, top: 0, left: 0, bottom: 208, right: 1600, x: 0, y: 0 };
+          this.cb([{ target, contentRect: rect } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        }
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    const card = await mountHeader(trackerHass(48.8584, 2.2945));
+    const text = card.shadowRoot?.textContent ?? "";
+    expect(text).toContain("Autonomie");
+    expect(text).toContain("328 km");
+    expect(text).toContain("Maison");
+    expect(text).not.toContain("48.8584");
+    expect(text).not.toContain("2.2945");
+    const tiles = Array.from(card.shadowRoot?.querySelectorAll(".map-bg img") ?? []);
+    expect(tiles.length).toBeGreaterThan(0);
+    expect(tiles.length).toBeLessThanOrEqual(8);
+    expect(tiles.every((tile) => tile.getAttribute("src")?.includes("/15/"))).toBe(true);
+    expect(tiles[0]?.getAttribute("referrerpolicy")).toBe("strict-origin-when-cross-origin");
+    expect(card.shadowRoot?.querySelector(".map-dot")).toBeTruthy();
+    expect(card.shadowRoot?.querySelector(".map-credit")?.textContent).toContain("OpenStreetMap");
+    const chart = card.shadowRoot?.querySelector(".series-chart");
+    expect(chart).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("skips the map without a position or when show_map is false", async () => {
+    const missing = await mountHeader(trackerHass());
+    expect(missing.shadowRoot?.textContent).toContain("328 km");
+    expect(missing.shadowRoot?.querySelector(".map-bg")).toBeNull();
+    const hidden = await mountHeader(trackerHass(48.8584, 2.2945), false);
+    (hidden as unknown as { _headerBox: { width: number; height: number } })._headerBox = {
+      width: 1600,
+      height: 120,
+    };
+    hidden.requestUpdate();
+    await hidden.updateComplete;
+    expect(hidden.shadowRoot?.querySelector(".map-bg")).toBeNull();
+    expect(hidden.shadowRoot?.textContent).not.toContain("48.8584");
   });
 });
 
@@ -297,6 +402,12 @@ describe("charts view", () => {
     expect(root?.querySelectorAll(".series-list rect.bar")).toHaveLength(4);
     expect(root?.querySelectorAll(".series-list circle.dot")).toHaveLength(1);
     expect(root?.querySelector(".series-chart")?.getAttribute("role")).toBe("group");
+    const chartBoxes = Array.from(root?.querySelectorAll(".series-chart") ?? []).map((node) =>
+      Number(node.getAttribute("height")),
+    );
+    expect(chartBoxes.length).toBeGreaterThan(3);
+    expect(Math.max(...chartBoxes)).toBeLessThanOrEqual(220);
+    expect(Math.min(...chartBoxes)).toBeGreaterThanOrEqual(100);
     const extraTitles = Array.from(root?.querySelectorAll(".series-extra .series-title") ?? []).map(
       (node) => node.textContent,
     );

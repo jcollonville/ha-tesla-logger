@@ -68,6 +68,7 @@ const EN = {
   updating: "Updating",
   entity: "Entity",
   defaultView: "Default view",
+  showMap: "Map",
   showBlocks: "Blocks",
   showFields: {
     status: "Status",
@@ -153,6 +154,7 @@ const FR: typeof EN = {
   updating: "Mise à jour",
   entity: "Entité",
   defaultView: "Vue par défaut",
+  showMap: "Carte",
   showBlocks: "Blocs",
   showFields: {
     status: "État",
