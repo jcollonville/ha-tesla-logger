@@ -279,13 +279,13 @@ describe("header map", () => {
         disconnect(): void {}
       },
     );
-    const card = await mountHeader(trackerHass(49.8496, 2.3915));
+    const card = await mountHeader(trackerHass(48.8584, 2.2945));
     const text = card.shadowRoot?.textContent ?? "";
     expect(text).toContain("Autonomie");
     expect(text).toContain("328 km");
     expect(text).toContain("Maison");
-    expect(text).not.toContain("49.8496");
-    expect(text).not.toContain("2.3915");
+    expect(text).not.toContain("48.8584");
+    expect(text).not.toContain("2.2945");
     const tiles = Array.from(card.shadowRoot?.querySelectorAll(".map-bg img") ?? []);
     expect(tiles.length).toBeGreaterThan(0);
     expect(tiles.length).toBeLessThanOrEqual(8);
@@ -302,7 +302,7 @@ describe("header map", () => {
     const missing = await mountHeader(trackerHass());
     expect(missing.shadowRoot?.textContent).toContain("328 km");
     expect(missing.shadowRoot?.querySelector(".map-bg")).toBeNull();
-    const hidden = await mountHeader(trackerHass(49.8496, 2.3915), false);
+    const hidden = await mountHeader(trackerHass(48.8584, 2.2945), false);
     (hidden as unknown as { _headerBox: { width: number; height: number } })._headerBox = {
       width: 1600,
       height: 120,
@@ -310,7 +310,7 @@ describe("header map", () => {
     hidden.requestUpdate();
     await hidden.updateComplete;
     expect(hidden.shadowRoot?.querySelector(".map-bg")).toBeNull();
-    expect(hidden.shadowRoot?.textContent).not.toContain("49.8496");
+    expect(hidden.shadowRoot?.textContent).not.toContain("48.8584");
   });
 });
 
