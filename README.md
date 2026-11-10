@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/jcollonville/ha-tesla-logger/main/images/icon.png" alt="Tesla Logger" width="128">
+
 # Tesla Logger
 
 Home Assistant integration and Lovelace card for the self-hosted [tesla-logger](https://github.com/jcollonville/tesla-rs) server. The server is read-only: this integration does not send vehicle commands.
