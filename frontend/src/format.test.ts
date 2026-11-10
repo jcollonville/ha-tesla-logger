@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   chargeHistory,
+  datePrefsFromHass,
   detailLine,
   displayChargerType,
   driveHistory,
@@ -33,12 +34,43 @@ describe("displayChargerType", () => {
 describe("formatListTimestamp", () => {
   it("formats a compact locale date and time", () => {
     const local = new Date(2026, 10, 10, 3, 30);
-    expect(formatListTimestamp(local.toISOString(), "fr")).toBe("mar. 10 nov. 03:30");
-    expect(formatListTimestamp(local.toISOString(), "en")).toBe("Tue Nov 10 03:30 AM");
+    expect(formatListTimestamp(local.toISOString(), "fr")).toBe("mar. 10 nov., 03:30");
+    expect(formatListTimestamp(local.toISOString(), "en")).toBe("Tue, Nov 10, 03:30 AM");
   });
 
   it("returns text that is not a date", () => {
     expect(formatListTimestamp("not-a-date", "fr")).toBe("not-a-date");
+  });
+
+  it("follows French and English clocks and the Home Assistant time zone", () => {
+    const instant = "2026-11-10T15:14:00Z";
+    expect(formatListTimestamp(instant, { language: "fr", hour12: false, timeZone: "UTC" })).toBe(
+      "mar. 10 nov., 15:14",
+    );
+    expect(formatListTimestamp(instant, { language: "en", hour12: true, timeZone: "UTC" })).toBe(
+      "Tue, Nov 10, 3:14 PM",
+    );
+    expect(
+      formatListTimestamp(instant, { language: "en", hour12: false, timeZone: "UTC" }),
+    ).toBe("Tue, Nov 10, 15:14");
+    expect(
+      formatListTimestamp(instant, {
+        language: "fr",
+        hour12: false,
+        timeZone: "America/New_York",
+      }),
+    ).toBe("mar. 10 nov., 10:14");
+    const fromHass = datePrefsFromHass({
+      locale: { language: "fr", time_format: "24", time_zone: "server" },
+      config: { time_zone: "UTC" },
+    });
+    expect(formatListTimestamp(instant, fromHass)).toBe("mar. 10 nov., 15:14");
+    const localZone = datePrefsFromHass({
+      locale: { language: "en", time_format: "12", time_zone: "local" },
+      config: { time_zone: "Pacific/Auckland" },
+    });
+    expect(localZone.timeZone).toBeUndefined();
+    expect(localZone.hour12).toBe(true);
   });
 });
 
@@ -47,9 +79,22 @@ describe("formatListRange", () => {
     const start = new Date(2026, 10, 10, 3, 30).toISOString();
     const sameDay = new Date(2026, 10, 10, 4, 10).toISOString();
     const nextDay = new Date(2026, 10, 11, 8, 0).toISOString();
-    expect(formatListRange(start, undefined, "fr")).toBe("mar. 10 nov. 03:30");
-    expect(formatListRange(start, sameDay, "fr")).toBe("mar. 10 nov. 03:30–04:10");
-    expect(formatListRange(start, nextDay, "fr")).toBe("mar. 10 nov. 03:30 – mer. 11 nov. 08:00");
+    expect(formatListRange(start, undefined, "fr")).toBe("mar. 10 nov., 03:30");
+    expect(formatListRange(start, sameDay, "fr")).toBe("mar. 10 nov., 03:30–04:10");
+    expect(formatListRange(start, nextDay, "fr")).toBe(
+      "mar. 10 nov., 03:30 – mer. 11 nov., 08:00",
+    );
+  });
+
+  it("formats a French and an English range in the chosen zone", () => {
+    const start = "2026-11-10T15:14:00Z";
+    const end = "2026-11-10T15:29:00Z";
+    expect(formatListRange(start, end, { language: "fr", hour12: false, timeZone: "UTC" })).toBe(
+      "mar. 10 nov., 15:14–15:29",
+    );
+    expect(formatListRange(start, end, { language: "en", hour12: true, timeZone: "UTC" })).toBe(
+      "Tue, Nov 10, 3:14 PM–3:29 PM",
+    );
   });
 });
 
@@ -71,7 +116,8 @@ describe("history rows", () => {
       },
       "fr",
     );
-    expect(row.when).toBe("lun. 9 nov. 08:00–08:30");
+    expect(row.when).toBe("lun. 9 nov., 08:00–08:30");
+    expect(row.details).toEqual(["30 min", "174 Wh/km", "70 → 64 %"]);
     expect(row.place).toBe("Maison → Bureau");
     expect(row.figure).toBe("18,4 km");
     expect(row.detail).toBe("30 min · 174 Wh/km · 70 → 64 %");

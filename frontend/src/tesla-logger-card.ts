@@ -16,8 +16,10 @@ import {
   asRecord,
   bucketInPeriod,
   chargeHistory,
+  datePrefsFromHass,
   driveHistory,
   formatDuration,
+  formatListTimestamp,
   formatNumber,
   periodRange,
   safeError,
@@ -260,9 +262,17 @@ export class TeslaLoggerCard extends LitElement {
         padding: 0 12px 8px;
       }
       .metric {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         background: var(--secondary-background-color, rgba(0, 0, 0, 0.04));
         border-radius: 12px;
         padding: 10px 12px;
+      }
+      .metric ha-icon {
+        flex: none;
+        --mdc-icon-size: 22px;
+        color: var(--primary-color, #03a9f4);
       }
       .metric span, .muted {
         display: block;
@@ -279,7 +289,6 @@ export class TeslaLoggerCard extends LitElement {
         gap: 0;
         box-sizing: border-box;
         width: 100%;
-        max-width: 560px;
         margin: 0;
         padding: 0 12px 4px;
         list-style: none;
@@ -344,7 +353,10 @@ export class TeslaLoggerCard extends LitElement {
         outline-offset: 2px;
       }
       .entry-meta {
-        display: block;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
         min-width: 0;
         max-width: 100%;
         overflow: hidden;
@@ -352,6 +364,10 @@ export class TeslaLoggerCard extends LitElement {
         font-size: 0.75rem;
         font-weight: 400;
         line-height: 1.3;
+      }
+      .entry-meta > span {
+        min-width: 0;
+        overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
@@ -546,11 +562,43 @@ export class TeslaLoggerCard extends LitElement {
       }
       .toolbar {
         display: flex;
-        justify-content: space-between;
         align-items: center;
+        gap: 4px;
         box-sizing: border-box;
         width: 100%;
-        max-width: 560px;
+      }
+      .toolbar-actions,
+      .back {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+      }
+      .page-indicator {
+        margin-left: auto;
+        color: var(--secondary-text-color);
+        font-size: 0.85rem;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      ha-icon-button {
+        width: 36px;
+        height: 36px;
+        --mdc-icon-button-size: 36px;
+        --mdc-icon-size: 20px;
+        color: var(--primary-text-color);
+      }
+      ha-icon-button[disabled] {
+        color: var(--disabled-text-color, var(--secondary-text-color));
+        opacity: 0.4;
+      }
+      button.back-label {
+        min-height: 0;
+        margin: 0;
+        padding: 0 4px 0 0;
+        border-bottom: 0;
+        color: var(--primary-text-color);
+        font-size: 0.92rem;
+        font-weight: 600;
       }
       @media (max-width: 420px) {
         .header {
@@ -706,8 +754,12 @@ export class TeslaLoggerCard extends LitElement {
     `;
   }
 
+  private get dates() {
+    return datePrefsFromHass(this.hass);
+  }
+
   private get cardLang(): Lang {
-    return language(this.hass?.locale?.language || this.hass?.language);
+    return language(this.dates.language);
   }
 
   private get text(): Copy {
@@ -770,12 +822,10 @@ export class TeslaLoggerCard extends LitElement {
     const shown = battery == null ? "—" : `${Math.round(battery)}`;
     const dash = battery == null ? 0 : Math.max(0, Math.min(100, battery));
     const activity = this.label("activity") || "";
-    const range = this.numeric("rated_range");
     const deviceName = this.deviceId ? this.hass?.devices?.[this.deviceId]?.name : undefined;
     const friendly = this.hass?.states[this._config?.entity || ""]?.attributes.friendly_name;
     const name = deviceName || (typeof friendly === "string" ? friendly : this.text.unknown);
     const fence = this.label("geofence");
-    const rangeText = range == null ? "—" : `${formatNumber(range, 0, this.cardLang)} km`;
     return html`
       <div class="header-wrap" data-map-host ${ref(this.watchSize)}>
         ${this.watermark()}
@@ -794,10 +844,7 @@ export class TeslaLoggerCard extends LitElement {
           </svg>
           <div>
             <p class="name">${name}</p>
-            <p class="sub">
-              ${this.text.range}
-              ${rangeText}${fence ? html` · ${fence}` : nothing}
-            </p>
+            ${fence ? html`<p class="sub">${fence}</p>` : nothing}
             <span class="pill">${activityLabel(this.text, activity)}</span>
           </div>
         </div>
@@ -890,8 +937,11 @@ export class TeslaLoggerCard extends LitElement {
     return this.stats();
   }
 
-  private metric(title: string, value: string) {
-    return html`<div class="metric"><span>${title}</span><strong>${value}</strong></div>`;
+  private metric(title: string, value: string, icon?: string) {
+    return html`<div class="metric">
+      ${icon ? html`<ha-icon icon=${icon}></ha-icon>` : nothing}
+      <div><span>${title}</span><strong>${value}</strong></div>
+    </div>`;
   }
 
   private quantity(key: string, digits: number, unit: string): string {
@@ -902,6 +952,11 @@ export class TeslaLoggerCard extends LitElement {
   private status() {
     return html`
       <div class="grid">
+        ${this.metric(
+          this.text.range,
+          this.quantity("rated_range", 0, "km"),
+          "mdi:map-marker-distance",
+        )}
         ${this.metric(this.text.speed, this.quantity("speed", 0, "km/h"))}
         ${this.metric(this.text.power, this.quantity("power", 1, "kW"))}
         ${this.metric(this.text.inside, this.quantity("inside_temp", 1, "°C"))}
@@ -917,17 +972,13 @@ export class TeslaLoggerCard extends LitElement {
   private drives() {
     const page = this._drives;
     return html`
-      <div class="toolbar">
-        <span>${this.text.page} ${page?.page ?? this._page}</span>
-        <button @click=${() => this.reload()}>${this.text.refresh}</button>
-      </div>
+      ${this.listToolbar(page)}
       <ul class="list">
         ${(page?.data || []).map((drive) =>
-          this.historyRow(driveHistory(drive, this.cardLang), () => this.openDrive(drive.id)),
+          this.historyRow(driveHistory(drive, this.dates), () => this.openDrive(drive.id)),
         )}
       </ul>
       ${page && page.data.length === 0 ? html`<p class="message">${this.text.emptyDrives}</p>` : nothing}
-      ${this.pager(page)}
     `;
   }
 
@@ -936,8 +987,13 @@ export class TeslaLoggerCard extends LitElement {
     const efficiency = whPerKm(detail?.energy_used_kwh, detail?.distance_km);
     return html`
       <div class="toolbar">
-        <button @click=${() => this.open("drives")}>${this.text.back}</button>
-        <span>${detail ? this.when(detail.start_at) : ""}</span>
+        <div class="back">
+          ${this.iconButton("mdi:arrow-left", this.text.back, false, () => this.open("drives"))}
+          <button type="button" class="back-label" @click=${() => this.open("drives")}>
+            ${this.text.back}
+          </button>
+        </div>
+        <span class="page-indicator">${detail ? this.when(detail.start_at) : ""}</span>
       </div>
       ${detail
         ? html`
@@ -965,19 +1021,15 @@ export class TeslaLoggerCard extends LitElement {
   private charges() {
     const page = this._charges;
     return html`
-      <div class="toolbar">
-        <span>${this.text.page} ${page?.page ?? this._page}</span>
-        <button @click=${() => this.reload()}>${this.text.refresh}</button>
-      </div>
+      ${this.listToolbar(page)}
       <ul class="list">
         ${(page?.data || []).map((charge) =>
-          this.historyRow(chargeHistory(charge, this.cardLang)),
+          this.historyRow(chargeHistory(charge, this.dates)),
         )}
       </ul>
       ${page && page.data.length === 0
         ? html`<p class="message">${this.text.emptyCharges}</p>`
         : nothing}
-      ${this.pager(page)}
     `;
   }
 
@@ -1138,7 +1190,7 @@ export class TeslaLoggerCard extends LitElement {
       }
       return this.text.thisYear;
     }
-    return bucketLabel(bucket.start, this._period, this.cardLang);
+    return bucketLabel(bucket.start, this._period, this.dates);
   }
 
   private bucketTotals(bucket: StatsBucket) {
@@ -1180,7 +1232,7 @@ export class TeslaLoggerCard extends LitElement {
     const digits = unit === "Wh/km" ? 0 : 1;
     const points: ChartPoint[] = buckets.map((bucket) => {
       const value = read(bucket);
-      const label = bucketLabel(bucket.start, this._period, this.cardLang);
+      const label = bucketLabel(bucket.start, this._period, this.dates);
       const shown = value == null ? "—" : `${formatNumber(value, digits, this.cardLang)} ${unit}`;
       return { label, value, title: `${label} · ${shown}` };
     });
@@ -1206,7 +1258,7 @@ export class TeslaLoggerCard extends LitElement {
     const cost = finiteOrNull(bucket?.charge_cost);
     const perKm = finiteOrNull(bucket?.cost_per_km);
     const points: ChartPoint[] = buckets.map((item) => {
-      const label = bucketLabel(item.start, this._period, this.cardLang);
+      const label = bucketLabel(item.start, this._period, this.dates);
       const ac = finiteOrNull(item.ac_energy_kwh);
       const dc = finiteOrNull(item.dc_energy_kwh);
       const acText = ac == null ? "—" : `${formatNumber(ac, 1, this.cardLang)} kWh`;
@@ -1310,20 +1362,52 @@ export class TeslaLoggerCard extends LitElement {
     `;
   }
 
-  private pager(page: Page<unknown> | undefined) {
-    if (!page || page.total <= page.per_page) {
-      return nothing;
-    }
-    const pages = Math.ceil(page.total / page.per_page);
+  private listToolbar(page: Page<unknown> | undefined) {
+    const current = page?.page ?? this._page;
+    const pages = page && page.per_page > 0 ? Math.ceil(page.total / page.per_page) : 1;
     return html`
-      <div class="pager">
-        <button ?disabled=${page.page <= 1} @click=${() => this.setPage(page.page - 1)}>
-          ${this.text.previous}
-        </button>
-        <button ?disabled=${page.page >= pages} @click=${() => this.setPage(page.page + 1)}>
-          ${this.text.next}
-        </button>
+      <div class="toolbar list-toolbar">
+        <div class="toolbar-actions">
+          ${this.iconButton("mdi:chevron-left", this.text.previous, !page || current <= 1, () =>
+            this.setPage(current - 1),
+          )}
+          ${this.iconButton(
+            "mdi:chevron-right",
+            this.text.next,
+            !page || current >= pages,
+            () => this.setPage(current + 1),
+          )}
+          ${this.iconButton("mdi:refresh", this.text.refresh, false, () => this.reload())}
+        </div>
+        <span class="page-indicator">${this.pageIndicator(page)}</span>
       </div>
+    `;
+  }
+
+  private pageIndicator(page: Page<unknown> | undefined): string {
+    if (!page || page.total <= 0 || page.per_page <= 0 || page.total <= page.per_page) {
+      return `${this.text.page} ${page?.page ?? this._page}`;
+    }
+    const start = (page.page - 1) * page.per_page + 1;
+    const end = Math.min(page.page * page.per_page, page.total);
+    return `${start}–${end}`;
+  }
+
+  private iconButton(icon: string, label: string, disabled: boolean, action: () => void) {
+    return html`
+      <ha-icon-button
+        .label=${label}
+        aria-label=${label}
+        title=${label}
+        ?disabled=${disabled}
+        @click=${() => {
+          if (!disabled) {
+            action();
+          }
+        }}
+      >
+        <ha-icon icon=${icon}></ha-icon>
+      </ha-icon-button>
     `;
   }
 
@@ -1335,8 +1419,10 @@ export class TeslaLoggerCard extends LitElement {
             ? ` · ${row.place}`
             : nothing}</span
         ><strong class="entry-figure">${row.figure ?? "—"}</strong></span
-      >${row.detail
-        ? html`<span class="entry-meta" title=${row.detail}>${row.detail}</span>`
+      >${row.details.length
+        ? html`<span class="entry-meta" title=${row.detail}
+            >${row.details.map((part) => html`<span>${part}</span>`)}</span
+          >`
         : nothing}`;
     if (onOpen) {
       return html`
@@ -1357,16 +1443,7 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   private when(value: string): string {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return value;
-    }
-    return date.toLocaleString(this.cardLang === "fr" ? "fr-FR" : "en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatListTimestamp(value, this.dates);
   }
 
   private openDrive(id: number): void {

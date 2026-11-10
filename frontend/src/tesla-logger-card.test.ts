@@ -149,16 +149,16 @@ describe("history lists", () => {
     expect(list).toBeTruthy();
     const rows = Array.from(list?.querySelectorAll(".entry") ?? []);
     expect(rows).toHaveLength(4);
-    expect(rows[0].querySelector(".entry-main time")?.textContent).toBe("mar. 10 nov. 03:30");
+    expect(rows[0].querySelector(".entry-main time")?.textContent).toBe("mar. 10 nov., 03:30");
     expect(rows[0].querySelector(".entry-main time")?.getAttribute("datetime")).toBe(start);
     expect(rows[0].querySelector(".entry-figure")?.textContent).toBe("6,5 kWh");
-    expect(rows[0].querySelector(".entry-meta")?.textContent).toBe("40 min · 11 kW · AC");
+    expect(metaParts(rows[0])).toEqual(["40 min", "11 kW", "AC"]);
     expect(rows[1].querySelector(".entry-figure")?.textContent).toBe("6,5 kWh");
-    expect(rows[1].querySelector(".entry-meta")?.textContent).toBe("40 min · 11 kW");
+    expect(metaParts(rows[1])).toEqual(["40 min", "11 kW"]);
     expect(rows[2].querySelector(".entry-figure")?.textContent).toBe("1,0 kWh");
-    expect(rows[2].querySelector(".entry-meta")?.textContent).toBe("15 min");
+    expect(metaParts(rows[2])).toEqual(["15 min"]);
     expect(rows[3].querySelector(".entry-figure")?.textContent).toBe("—");
-    expect(rows[3].querySelector(".entry-meta")?.textContent).toBe("1 min");
+    expect(metaParts(rows[3])).toEqual(["1 min"]);
     expect(list?.textContent).not.toContain("<invalid>");
     expect(list?.textContent?.toLowerCase()).not.toContain("none");
     expect(list?.textContent?.toLowerCase()).not.toContain("null");
@@ -167,15 +167,18 @@ describe("history lists", () => {
     const meta = rows[0].querySelector(".entry-meta");
     expect(meta?.getAttribute("title")).toBe("40 min · 11 kW · AC");
     const metaStyle = meta ? getComputedStyle(meta) : null;
-    expect(metaStyle?.textOverflow).toBe("ellipsis");
-    expect(metaStyle?.whiteSpace).toBe("nowrap");
+    expect(metaStyle?.justifyContent).toBe("space-between");
+    const piece = rows[0].querySelector(".entry-meta > span");
+    const pieceStyle = piece ? getComputedStyle(piece) : null;
+    expect(pieceStyle?.textOverflow).toBe("ellipsis");
+    expect(pieceStyle?.whiteSpace).toBe("nowrap");
     const mainStyle = getComputedStyle(rows[0].querySelector(".entry-main") as Element);
     expect(mainStyle.textOverflow).toBe("ellipsis");
     expect(mainStyle.whiteSpace).toBe("nowrap");
     const lineStyle = getComputedStyle(rows[0].querySelector(".entry-line") as Element);
     expect(lineStyle.display).toBe("grid");
     const listStyle = getComputedStyle(list as Element);
-    expect(listStyle.maxWidth).toBe("560px");
+    expect(["", "none"]).toContain(listStyle.maxWidth);
     const entryStyle = getComputedStyle(rows[0]);
     expect(parseFloat(entryStyle.paddingTop)).toBeLessThan(10);
     expect(entryStyle.borderBottomStyle).toBe("solid");
@@ -209,19 +212,76 @@ describe("history lists", () => {
     const rows = Array.from(card.shadowRoot?.querySelectorAll("ul.list .entry") ?? []);
     expect(rows).toHaveLength(2);
     expect(rows[0].tagName).toBe("BUTTON");
-    expect(rows[0].querySelector(".entry-main time")?.textContent).toBe("lun. 9 nov. 08:00");
-    expect(rows[0].querySelector(".entry-main")?.textContent).toBe("lun. 9 nov. 08:00 · Maison → Bureau");
+    expect(rows[0].querySelector(".entry-main time")?.textContent).toBe("lun. 9 nov., 08:00");
+    expect(rows[0].querySelector(".entry-main")?.textContent).toBe(
+      "lun. 9 nov., 08:00 · Maison → Bureau",
+    );
     expect(rows[0].querySelector(".entry-figure")?.textContent).toBe("18,4 km");
-    expect(rows[0].querySelector(".entry-meta")?.textContent).toBe("30 min · 174 Wh/km · 3,2 kWh");
+    expect(metaParts(rows[0])).toEqual(["30 min", "174 Wh/km", "3,2 kWh"]);
     expect(rows[1].querySelector(".entry-figure")?.textContent).toBe("—");
-    expect(rows[1].querySelector(".entry-meta")?.textContent).toBe("10 min · 1,5 kWh");
+    expect(metaParts(rows[1])).toEqual(["10 min", "1,5 kWh"]);
     expect(rows[0].querySelector(".row")).toBeNull();
 
     rows[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await card.updateComplete;
     expect((card as unknown as { _view: string })._view).toBe("drive");
+    const back = card.shadowRoot?.querySelector("ha-icon-button");
+    expect(back?.querySelector("ha-icon")?.getAttribute("icon")).toBe("mdi:arrow-left");
+    expect(back?.getAttribute("aria-label")).toBe("Retour");
+    expect(card.shadowRoot?.querySelector(".back-label")?.textContent?.trim()).toBe("Retour");
+  });
+
+  it("puts icon controls on the left and the page range on the right", async () => {
+    const card = await showList("charges", {
+      page: 2,
+      per_page: 20,
+      total: 45,
+      data: [
+        {
+          id: 9,
+          start_at: "2026-11-10T15:14:00Z",
+          end_at: "2026-11-10T15:29:00Z",
+          energy_added_kwh: 6.5,
+        },
+      ],
+    });
+    card.hass = {
+      ...card.hass,
+      locale: { language: "en", time_format: "24", time_zone: "server" },
+      config: { time_zone: "UTC" },
+    } as HomeAssistant;
+    await card.updateComplete;
+
+    const toolbar = card.shadowRoot?.querySelector(".list-toolbar");
+    const list = card.shadowRoot?.querySelector("ul.list");
+    expect(toolbar).toBeTruthy();
+    expect(list).toBeTruthy();
+    expect(toolbar!.compareDocumentPosition(list!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const buttons = Array.from(toolbar?.querySelectorAll("ha-icon-button") ?? []);
+    expect(buttons.map((button) => button.querySelector("ha-icon")?.getAttribute("icon"))).toEqual([
+      "mdi:chevron-left",
+      "mdi:chevron-right",
+      "mdi:refresh",
+    ]);
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Previous",
+      "Next",
+      "Refresh",
+    ]);
+    expect(buttons[0]?.hasAttribute("disabled")).toBe(false);
+    expect(buttons[1]?.hasAttribute("disabled")).toBe(false);
+    expect(buttons[2]?.hasAttribute("disabled")).toBe(false);
+    expect(toolbar?.querySelector(".page-indicator")?.textContent).toBe("21–40");
+    expect(card.shadowRoot?.querySelector("time")?.textContent).toBe("Tue, Nov 10, 15:14–15:29");
+
+    buttons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect((card as unknown as { _page: number })._page).toBe(3);
   });
 });
+
+function metaParts(row: Element): Array<string | null> {
+  return Array.from(row.querySelectorAll(".entry-meta > span"), (node) => node.textContent);
+}
 
 describe("header map", () => {
   function trackerHass(latitude?: number, longitude?: number): HomeAssistant {
@@ -263,7 +323,7 @@ describe("header map", () => {
     return card;
   }
 
-  it("drops coordinates, keeps the range, and paints only the visible tiles", async () => {
+  it("drops coordinates and the header range, and paints only the visible tiles", async () => {
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -279,13 +339,19 @@ describe("header map", () => {
         disconnect(): void {}
       },
     );
-    const card = await mountHeader(trackerHass(48.8584, 2.2945));
+    const card = await mountHeader(trackerHass(0, 0));
+    const header = card.shadowRoot?.querySelector(".header");
+    expect(header?.querySelector(".name")?.textContent).toBe("Red");
+    expect(header?.querySelector(".sub")?.textContent).toBe("Maison");
+    expect(header?.querySelector(".pill")?.textContent?.trim()).not.toBe("");
+    expect(header?.textContent).not.toContain("Autonomie");
+    expect(header?.textContent).not.toContain("328");
+    const range = card.shadowRoot?.querySelector(".grid .metric");
+    expect(range?.querySelector("span")?.textContent).toBe("Autonomie");
+    expect(range?.querySelector("strong")?.textContent).toBe("328 km");
+    expect(range?.querySelector("ha-icon")?.getAttribute("icon")).toBe("mdi:map-marker-distance");
     const text = card.shadowRoot?.textContent ?? "";
-    expect(text).toContain("Autonomie");
-    expect(text).toContain("328 km");
-    expect(text).toContain("Maison");
-    expect(text).not.toContain("48.8584");
-    expect(text).not.toContain("2.2945");
+    expect(text).not.toContain("0.0000");
     const tiles = Array.from(card.shadowRoot?.querySelectorAll(".map-bg img") ?? []);
     expect(tiles.length).toBeGreaterThan(0);
     expect(tiles.length).toBeLessThanOrEqual(8);
@@ -302,7 +368,7 @@ describe("header map", () => {
     const missing = await mountHeader(trackerHass());
     expect(missing.shadowRoot?.textContent).toContain("328 km");
     expect(missing.shadowRoot?.querySelector(".map-bg")).toBeNull();
-    const hidden = await mountHeader(trackerHass(48.8584, 2.2945), false);
+    const hidden = await mountHeader(trackerHass(0, 0), false);
     (hidden as unknown as { _headerBox: { width: number; height: number } })._headerBox = {
       width: 1600,
       height: 120,
@@ -310,7 +376,7 @@ describe("header map", () => {
     hidden.requestUpdate();
     await hidden.updateComplete;
     expect(hidden.shadowRoot?.querySelector(".map-bg")).toBeNull();
-    expect(hidden.shadowRoot?.textContent).not.toContain("48.8584");
+    expect(hidden.shadowRoot?.textContent).not.toContain("0.0000");
   });
 });
 
