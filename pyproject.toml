@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tesla-logger-homeassistant"
-version = "0.1.7"
+version = "0.1.8"
 description = "Home Assistant integration for the tesla-logger server"
 requires-python = ">=3.12"
 license = { text = "MIT" }
