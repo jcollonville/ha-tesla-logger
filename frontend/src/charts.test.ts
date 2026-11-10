@@ -1,15 +1,36 @@
 import { render } from "lit";
 import { describe, expect, it } from "vitest";
 
-import { bucketLabel, currentBucketIndex, niceMax, seriesChart, type ChartPoint } from "./charts";
+import {
+  bucketLabel,
+  chartFrame,
+  currentBucketIndex,
+  niceMax,
+  seriesChart,
+  type ChartPoint,
+} from "./charts";
 
-function mount(points: ChartPoint[], kind: "bar" | "line" | "stack") {
+function mount(
+  points: ChartPoint[],
+  kind: "bar" | "line" | "stack",
+  width?: number,
+  compact?: boolean,
+) {
   const host = document.createElement("div");
   render(
-    seriesChart(points, kind, "Consommation", (value) => String(Math.round(value))),
+    seriesChart(points, kind, "Consommation", (value) => String(Math.round(value)), {
+      width,
+      compact,
+    }),
     host,
   );
   return host;
+}
+
+function viewBox(host: HTMLElement): number[] {
+  return (host.querySelector("svg")?.getAttribute("viewBox") ?? "")
+    .split(" ")
+    .map((part) => Number(part));
 }
 
 describe("niceMax", () => {
@@ -88,5 +109,34 @@ describe("seriesChart", () => {
     );
     expect(host.querySelectorAll("rect.bar.ac")).toHaveLength(2);
     expect(host.querySelectorAll("rect.bar.dc")).toHaveLength(1);
+  });
+
+  it("keeps height, type, and stroke geometry fixed when the plot grows wider", () => {
+    const narrow = mount(points, "line", 360);
+    const mid = mount(points, "line", 1000);
+    const wide = mount(points, "line", 1600);
+    const narrowBox = viewBox(narrow);
+    const midBox = viewBox(mid);
+    const wideBox = viewBox(wide);
+    expect(narrowBox[2]).toBe(360);
+    expect(wideBox[2]).toBe(1600);
+    expect(narrowBox[3]).toBe(chartFrame(360).height);
+    expect(midBox[3]).toBe(chartFrame(1600).height);
+    expect(wideBox[3]).toBe(midBox[3]);
+    expect(narrowBox[3]).toBeGreaterThanOrEqual(170);
+    expect(narrowBox[3]).toBeLessThan(midBox[3]);
+    expect(wideBox[3]).toBeLessThanOrEqual(220);
+    expect(wideBox[3]).toBeLessThan((1600 / 360) * narrowBox[3]);
+    expect(wide.querySelector("svg")?.getAttribute("height")).toBe(String(wideBox[3]));
+    expect(narrow.querySelector("circle.dot")?.getAttribute("r")).toBe("3.5");
+    expect(wide.querySelector("circle.dot")?.getAttribute("r")).toBe("3.5");
+    const yOf = (host: HTMLElement) => host.querySelector("circle.dot")?.getAttribute("cy");
+    expect(yOf(wide)).toBe(yOf(mid));
+    const compactNarrow = viewBox(mount(points, "bar", 360, true));
+    const compactWide = viewBox(mount(points, "bar", 1600, true));
+    expect(compactNarrow[3]).toBe(chartFrame(360, true).height);
+    expect(compactWide[3]).toBe(chartFrame(1600, true).height);
+    expect(compactWide[3]).toBeLessThan(narrowBox[3]);
+    expect(compactWide[3]).toBeLessThanOrEqual(150);
   });
 });
