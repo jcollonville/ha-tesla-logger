@@ -191,3 +191,52 @@ async def test_websocket_updates_battery(
     hub = entry.runtime_data
     assert hub.websocket.reconnect_delays
     assert hub.websocket.reconnect_delays[0] == 0.01
+
+
+async def test_websocket_nulls_do_not_clear_known_rest_values(
+    hass, logger_server, enable_custom_integrations
+) -> None:
+    """Owner-stream frames omit temps and charge totals; null must not blank them."""
+    _state_api, url = logger_server
+    entry = _entry(url, websocket=False)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator = next(iter(entry.runtime_data.coordinators.values()))
+    coordinator.apply_ws(
+        {
+            "type": "state",
+            "vehicle_id": 1,
+            "vin": VIN,
+            "name": None,
+            "model": None,
+            "at": "2026-11-09T11:00:00Z",
+            "activity": "driving",
+            "battery_level": 70,
+            "speed_kmh": 0,
+            "inside_temp_c": None,
+            "outside_temp_c": None,
+            "charge_energy_added_kwh": None,
+            "charge_limit_soc": None,
+        }
+    )
+    await hass.async_block_till_done()
+
+    assert float(_state(hass, "sensor", "battery_level").state) == 70
+    assert float(_state(hass, "sensor", "speed").state) == 0
+    assert _state(hass, "sensor", "activity").state == "driving"
+    assert float(_state(hass, "sensor", "inside_temp").state) == 21.5
+    assert float(_state(hass, "sensor", "outside_temp").state) == 12
+    assert float(_state(hass, "sensor", "energy_added").state) == 6.5
+    assert float(_state(hass, "sensor", "charge_limit").state) == 80
+    assert coordinator.data.state.get("type") is None
+    assert coordinator.data.state["last_data_at"] == "2026-11-09T11:00:00Z"
+    assert coordinator.meta.name == "Red"
+    assert coordinator.meta.model == "Model Y"
+
+    coordinator.apply_ws({"inside_temp_c": 19, "charge_limit_soc": 90})
+    await hass.async_block_till_done()
+    assert float(_state(hass, "sensor", "inside_temp").state) == 19
+    assert float(_state(hass, "sensor", "charge_limit").state) == 90
+    assert float(_state(hass, "sensor", "outside_temp").state) == 12
