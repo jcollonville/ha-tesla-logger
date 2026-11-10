@@ -4,7 +4,7 @@ import { MAP_ZOOM, TILE_SIZE, readPosition, tilesForView, worldPixel } from "./m
 
 describe("readPosition", () => {
   it("accepts a finite coordinate pair and rejects everything else", () => {
-    expect(readPosition(48.8584, 2.2945)).toEqual({ lat: 48.8584, lon: 2.2945 });
+    expect(readPosition(0, 0)).toEqual({ lat: 0, lon: 0 });
     expect(readPosition(null, 2)).toBeNull();
     expect(readPosition(91, 0)).toBeNull();
     expect(readPosition(0, Number.NaN)).toBeNull();
@@ -13,7 +13,7 @@ describe("readPosition", () => {
 
 describe("tilesForView", () => {
   it("centers the car and requests only the visible zoom-15 tiles", () => {
-    const view = tilesForView(48.8584, 2.2945, 360, 96);
+    const view = tilesForView(0, 0, 360, 96);
     expect(view.dot).toEqual({ left: 180, top: 48 });
     expect(view.tiles.length).toBeGreaterThan(0);
     expect(view.tiles.length).toBeLessThanOrEqual(8);
@@ -23,7 +23,7 @@ describe("tilesForView", () => {
       );
       expect(tile.url).not.toMatch(/\/14\/|\/16\//);
     }
-    const wide = tilesForView(48.8584, 2.2945, 1600, 120);
+    const wide = tilesForView(0, 0, 1600, 120);
     expect(wide.tiles.length).toBeLessThanOrEqual(16);
     expect(new Set(wide.tiles.map((tile) => tile.url)).size).toBe(wide.tiles.length);
   });

@@ -114,11 +114,11 @@ show:
 
 `status` can be set the same way. Omitted keys stay visible. The visual editor exposes the same toggles.
 
-`show_map` defaults to true. The header keeps the range and hides raw coordinates. When the vehicle device tracker has a latitude and longitude, the header shows a faint, desaturated, non-interactive OpenStreetMap centered on the car, with a small red dot. Set `show_map: false` to hide it. The card requests only the tiles visible in that header, at zoom 15, from `https://tile.openstreetmap.org/{z}/{x}/{y}.png`.
+`show_map` defaults to true. The header hides raw coordinates. When the vehicle device tracker has a latitude and longitude, it shows a faint, desaturated, non-interactive OpenStreetMap centered on the car, with a small red dot. Set `show_map: false` to hide it. The card requests only the tiles visible in that header, at zoom 15, from `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. Range is a Status reading, not a line under the car name.
 
 The card has five views:
 
-- Status: battery, range, activity, and the main readings, with the position map in the header when coordinates are known
+- Status: battery ring, activity, geofence name, range, and the main readings, with the position map in the header when coordinates are known
 - Drives: distance, duration, and consumption, with a detail view
 - Drive detail: Leaflet map (OpenStreetMap tiles) of the RDP route, plus speed, elevation, and battery charts
 - Charges and week / month / year stats

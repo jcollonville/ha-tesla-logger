@@ -1,5 +1,5 @@
 import { svg, type SVGTemplateResult } from "lit";
-import { bucketInPeriod } from "./format";
+import { bucketInPeriod, datePrefs, type DatePrefs } from "./format";
 import type { Lang } from "./i18n";
 import type { Period } from "./types";
 
@@ -73,22 +73,27 @@ export function currentBucketIndex(
   return found >= 0 ? found : Math.max(0, starts.length - 1);
 }
 
-export function bucketLabel(start: string, period: Period, lang: Lang): string {
+export function bucketLabel(start: string, period: Period, prefs: Lang | DatePrefs): string {
   const date = new Date(start);
   if (Number.isNaN(date.getTime())) {
     return start;
   }
-  const locale = lang === "fr" ? "fr-FR" : "en-US";
+  const resolved = datePrefs(prefs);
+  const locale = resolved.language || "en";
+  const zone = resolved.timeZone ? { timeZone: resolved.timeZone } : {};
   if (period === "year") {
-    return new Intl.DateTimeFormat(locale, { year: "numeric" }).format(date);
+    return new Intl.DateTimeFormat(locale, { year: "numeric", ...zone }).format(date);
   }
   if (period === "month") {
-    return new Intl.DateTimeFormat(locale, { month: "short" })
+    return new Intl.DateTimeFormat(locale, { month: "short", ...zone })
       .format(date)
-      .replace(/\.$/, "");
+      .replace(/[\u00a0\u202f]/g, " ")
+      .replace(/\.$/, "")
+      .trim();
   }
-  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" })
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", ...zone })
     .format(date)
+    .replace(/[\u00a0\u202f]/g, " ")
     .replace(/,/g, "")
     .replace(/\s+/g, " ")
     .trim();

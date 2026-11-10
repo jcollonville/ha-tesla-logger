@@ -63,6 +63,23 @@ describe("bucketLabel", () => {
     expect(week.toLowerCase()).toContain("nov");
     expect(week).toContain("15");
   });
+
+  it("uses the locale's month name and the selected time zone", () => {
+    const december = "2026-12-01T12:00:00Z";
+    expect(bucketLabel(december, "month", { language: "en", timeZone: "UTC" })).toBe("Dec");
+    expect(bucketLabel(december, "month", { language: "fr", timeZone: "UTC" }).toLowerCase()).toBe(
+      "déc",
+    );
+    const nearMidnight = "2026-12-01T00:30:00Z";
+    expect(
+      bucketLabel(nearMidnight, "month", { language: "fr", timeZone: "America/New_York" })
+        .toLowerCase(),
+    ).toContain("nov");
+    expect(bucketLabel(nearMidnight, "week", { language: "en", timeZone: "UTC" })).toMatch(/Dec/);
+    expect(bucketLabel(nearMidnight, "week", { language: "en", timeZone: "UTC" })).not.toMatch(
+      /déc/i,
+    );
+  });
 });
 
 describe("seriesChart", () => {

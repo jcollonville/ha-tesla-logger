@@ -17,7 +17,17 @@ export interface HomeAssistant {
   states: Record<string, HassEntity>;
   entities?: Record<string, EntityRegistryEntry>;
   devices?: Record<string, DeviceRegistryEntry>;
-  locale?: { language?: string };
+  locale?: {
+    language?: string;
+    /** "12", "24", "language", or "system". */
+    time_format?: string;
+    /** "local" uses the browser zone. "server" uses `config.time_zone`. */
+    time_zone?: string;
+  };
+  config?: {
+    /** IANA name of the Home Assistant server clock. */
+    time_zone?: string;
+  };
   language?: string;
   themes?: { darkMode?: boolean };
   callService(
