@@ -144,6 +144,15 @@
         "period": { "name": "Period", "description": "Bucket size: week, month, or year." },
         "count": { "name": "Count", "description": "Number of buckets, from 1 to 60, oldest first." }
       }
+    },
+    "get_consumption_by_temp": {
+      "name": "Get consumption by temperature",
+      "description": "Return Wh/km by outdoor temperature bin for the same window as the stats series.",
+      "fields": {
+        "device_id": { "name": "Vehicle", "description": "Tesla Logger vehicle." },
+        "period": { "name": "Period", "description": "Bucket size: week, month, or year." },
+        "count": { "name": "Count", "description": "Number of periods in the window, from 1 to 60." }
+      }
     }
   }
 }

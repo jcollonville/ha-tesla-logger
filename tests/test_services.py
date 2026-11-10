@@ -85,8 +85,22 @@ async def test_services_return_history(hass, logger_server, enable_custom_integr
     assert series["buckets"][0]["wh_per_km"] == 180
     assert series["buckets"][0]["drive_duration_s"] == 7200
     assert series["buckets"][0]["drive_count"] == 4
+    assert series["buckets"][0]["range_at_100_km"] == 480
+    assert series["buckets"][0]["dc_share_pct"] == 40
+
+    temps = await hass.services.async_call(
+        DOMAIN,
+        "get_consumption_by_temp",
+        {"device_id": device.id, "period": "month", "count": 6},
+        blocking=True,
+        return_response=True,
+    )
+    assert temps["data"][0]["temp_c_bucket"] == 5
+    assert temps["data"][1]["wh_per_km"] == 150
+    assert _state.temp_calls == [{"id": "1", "period": "month", "count": "6"}]
+    assert "/api/v1/vehicles/1/stats/consumption_by_temp" in _state.paths
     assert series["buckets"][1]["wh_per_km"] is None
     assert series["buckets"][0]["start"] < series["buckets"][1]["start"]
     assert _state.series_calls == [{"id": "1", "period": "month", "count": "6"}]
     assert "/api/v1/vehicles/1/stats/series" in _state.paths
-    assert TOKEN not in json.dumps([drives, detail, charges, stats, series])
+    assert TOKEN not in json.dumps([drives, detail, charges, stats, series, temps])

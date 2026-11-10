@@ -103,6 +103,20 @@ export interface StatsBucket {
   energy_charged_kwh?: number | null;
   drive_duration_s?: number | null;
   drive_count?: number | null;
+  range_at_100_km?: number | null;
+  ac_energy_kwh?: number | null;
+  dc_energy_kwh?: number | null;
+  dc_share_pct?: number | null;
+  charge_cost?: number | null;
+  cost_per_km?: number | null;
+  idle_range_loss_km_per_day?: number | null;
+  idle_energy_loss_kwh_per_day?: number | null;
+}
+
+export interface TempBin {
+  temp_c_bucket: number;
+  wh_per_km?: number | null;
+  distance_km?: number | null;
 }
 
 export interface StatsSeries {

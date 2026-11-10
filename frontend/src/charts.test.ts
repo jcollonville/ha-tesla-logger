@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { bucketLabel, currentBucketIndex, niceMax, seriesChart, type ChartPoint } from "./charts";
 
-function mount(points: ChartPoint[], kind: "bar" | "line") {
+function mount(points: ChartPoint[], kind: "bar" | "line" | "stack") {
   const host = document.createElement("div");
   render(
     seriesChart(points, kind, "Consommation", (value) => String(Math.round(value))),
@@ -76,5 +76,17 @@ describe("seriesChart", () => {
     const labels = Array.from(host.querySelectorAll(".y-label"), (node) => node.textContent?.trim());
     expect(labels).toContain("0");
     expect(labels).toContain("100");
+  });
+
+  it("stacks AC under DC", () => {
+    const host = mount(
+      [
+        { label: "oct", value: 12, stack: 8, title: "oct · AC 12 · DC 8" },
+        { label: "nov", value: 5, stack: 0, title: "nov · AC 5 · DC 0" },
+      ],
+      "stack",
+    );
+    expect(host.querySelectorAll("rect.bar.ac")).toHaveLength(2);
+    expect(host.querySelectorAll("rect.bar.dc")).toHaveLength(1);
   });
 });

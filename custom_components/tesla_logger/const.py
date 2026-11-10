@@ -32,12 +32,14 @@ SERVICE_GET_DRIVE: Final = "get_drive"
 SERVICE_GET_CHARGES: Final = "get_charges"
 SERVICE_GET_STATS: Final = "get_stats"
 SERVICE_GET_STATS_SERIES: Final = "get_stats_series"
+SERVICE_GET_CONSUMPTION_BY_TEMP: Final = "get_consumption_by_temp"
 SERVICES: Final = (
     SERVICE_GET_DRIVES,
     SERVICE_GET_DRIVE,
     SERVICE_GET_CHARGES,
     SERVICE_GET_STATS,
     SERVICE_GET_STATS_SERIES,
+    SERVICE_GET_CONSUMPTION_BY_TEMP,
 )
 
 

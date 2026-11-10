@@ -23,6 +23,7 @@ class FakeState:
         self.paths: list[str] = []
         self.headers: list[str] = []
         self.series_calls: list[dict[str, str]] = []
+        self.temp_calls: list[dict[str, str]] = []
         self.battery_level = 55.0
         self.ws_battery_level = 80.0
         self.last_error: str | None = "token tl_shouldnotleak failed"
@@ -245,6 +246,22 @@ def make_app(state: FakeState) -> web.Application:
             raise web.HTTPBadRequest(text='{"error":"vehicle_id is required"}')
         return web.json_response(state.stats(dict(request.query)))
 
+    async def consumption_by_temp(request: web.Request) -> web.Response:
+        _auth(request)
+        state.temp_calls.append(
+            {
+                "id": request.match_info["id"],
+                "period": request.query.get("period", ""),
+                "count": request.query.get("count", ""),
+            }
+        )
+        return web.json_response(
+            [
+                {"temp_c_bucket": 5, "wh_per_km": 190, "distance_km": 12},
+                {"temp_c_bucket": 15, "wh_per_km": 150, "distance_km": 80},
+            ]
+        )
+
     async def stats_series(request: web.Request) -> web.Response:
         _auth(request)
         period = request.query.get("period", "month")
@@ -267,6 +284,14 @@ def make_app(state: FakeState) -> web.Application:
                         "energy_charged_kwh": 20.0,
                         "drive_duration_s": 7200,
                         "drive_count": 4,
+                        "range_at_100_km": 480.0,
+                        "ac_energy_kwh": 12.0,
+                        "dc_energy_kwh": 8.0,
+                        "dc_share_pct": 40.0,
+                        "charge_cost": 15.5,
+                        "cost_per_km": 0.16,
+                        "idle_range_loss_km_per_day": 1.2,
+                        "idle_energy_loss_kwh_per_day": 0.3,
                     },
                     {
                         "start": "2026-11-01T00:00:00Z",
@@ -276,6 +301,14 @@ def make_app(state: FakeState) -> web.Application:
                         "energy_charged_kwh": 25.0,
                         "drive_duration_s": 5400,
                         "drive_count": 2,
+                        "range_at_100_km": 470.0,
+                        "ac_energy_kwh": 5.0,
+                        "dc_energy_kwh": 0.0,
+                        "dc_share_pct": 0.0,
+                        "charge_cost": 2.0,
+                        "cost_per_km": 0.05,
+                        "idle_range_loss_km_per_day": 0.4,
+                        "idle_energy_loss_kwh_per_day": 0.1,
                     },
                 ],
             }
@@ -335,6 +368,7 @@ def make_app(state: FakeState) -> web.Application:
     app.router.add_get("/api/v1/charges", charges)
     app.router.add_get("/api/v1/stats", stats)
     app.router.add_get("/api/v1/vehicles/{id}/stats/series", stats_series)
+    app.router.add_get("/api/v1/vehicles/{id}/stats/consumption_by_temp", consumption_by_temp)
     app.router.add_get("/api/v1/geofences", geofences)
     app.router.add_get("/api/v1/ws", websocket)
     return app

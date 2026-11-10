@@ -63,13 +63,14 @@ tesla-logger 0.1 stores more columns than its state endpoint returns. Charger vo
 
 ## Services
 
-All five services require a response (`SupportsResponse.ONLY`) and take the Home Assistant device id of the vehicle. They proxy the server and return its JSON.
+All six services require a response (`SupportsResponse.ONLY`) and take the Home Assistant device id of the vehicle. They proxy the server and return its JSON.
 
 - `tesla_logger.get_drives` — `device_id`, optional `from`, `to`, `page`, `per_page`
 - `tesla_logger.get_drive` — `device_id`, `drive_id`, optional `max_points` (route from `/api/v1/drives/{id}`)
 - `tesla_logger.get_charges` — same paging fields as drives
 - `tesla_logger.get_stats` — `device_id`, optional `from`, `to`
 - `tesla_logger.get_stats_series` — `device_id`, `period` (`week`, `month`, or `year`), optional `count` (buckets from `/api/v1/vehicles/{id}/stats/series`, oldest first)
+- `tesla_logger.get_consumption_by_temp` — same `period` and `count`; Wh/km by 5°C bin from `/api/v1/vehicles/{id}/stats/consumption_by_temp`
 
 ```yaml
 action: tesla_logger.get_stats

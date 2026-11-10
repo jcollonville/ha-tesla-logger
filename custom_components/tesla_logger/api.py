@@ -229,6 +229,24 @@ class TeslaLoggerApi:
             raise TeslaLoggerApiError("unexpected stats series payload")
         return payload
 
+    async def get_consumption_by_temp(
+        self,
+        vehicle_id: int,
+        *,
+        period: str,
+        count: int,
+    ) -> dict[str, Any]:
+        """Return Wh/km by outdoor-temperature bin for one window."""
+        payload = await self._get(
+            f"/api/v1/vehicles/{vehicle_id}/stats/consumption_by_temp",
+            {"period": period, "count": count},
+        )
+        if isinstance(payload, list):
+            return {"data": [row for row in payload if isinstance(row, dict)]}
+        if isinstance(payload, dict):
+            return payload
+        raise TeslaLoggerApiError("unexpected consumption by temperature payload")
+
     async def list_geofences(self) -> list[dict[str, Any]]:
         payload = await self._get("/api/v1/geofences")
         if not isinstance(payload, list):

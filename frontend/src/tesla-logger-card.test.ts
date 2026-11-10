@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { safeError } from "./format";
 import { TeslaLoggerCard } from "./tesla-logger-card";
-import type { Charge, Drive, HomeAssistant, Page, StatsSeries } from "./types";
+import type { Charge, Drive, HomeAssistant, Page, StatsSeries, TempBin } from "./types";
 
 const HISTORY_ERROR = {
   code: "home_assistant_error",
@@ -228,6 +228,13 @@ describe("charts view", () => {
           energy_charged_kwh: 20,
           drive_duration_s: 7200,
           drive_count: 4,
+          range_at_100_km: 480,
+          ac_energy_kwh: 12,
+          dc_energy_kwh: 8,
+          dc_share_pct: 40,
+          charge_cost: 15.5,
+          cost_per_km: 0.16,
+          idle_range_loss_km_per_day: 1.2,
         },
         {
           start: current,
@@ -237,16 +244,29 @@ describe("charts view", () => {
           energy_charged_kwh: 0,
           drive_duration_s: 5400,
           drive_count: 1,
+          range_at_100_km: 470,
+          ac_energy_kwh: 5,
+          dc_energy_kwh: 0,
+          dc_share_pct: 0,
+          charge_cost: 2,
+          cost_per_km: 0.05,
+          idle_range_loss_km_per_day: 0.4,
         },
       ],
     };
+    const bins: TempBin[] = [{ temp_c_bucket: 10, wh_per_km: 160, distance_km: 40 }];
     const card = new TeslaLoggerCard();
     mounted.push(card);
     document.body.append(card);
     card.hass = frenchHass();
     card.setConfig({ entity: "sensor.tesla_location", default_view: "charts" });
-    const state = card as unknown as { _series?: StatsSeries; _seriesPeriod?: string };
+    const state = card as unknown as {
+      _series?: StatsSeries;
+      _seriesPeriod?: string;
+      _tempBins?: TempBin[];
+    };
     state._series = series;
+    state._tempBins = bins;
     state._seriesPeriod = "month";
     await card.updateComplete;
 
@@ -258,23 +278,39 @@ describe("charts view", () => {
       (button) => button.textContent?.trim(),
     );
     expect(pressed).toContain("Mois");
-    const titles = Array.from(root?.querySelectorAll(".series-title") ?? []).map(
+    const titles = Array.from(root?.querySelectorAll(".series-list .series-title") ?? []).map(
       (node) => node.textContent,
     );
     expect(titles).toEqual(["Consommation", "Distance", "Énergie chargée"]);
-    const tips = Array.from(root?.querySelectorAll("title") ?? []).map((node) => node.textContent);
+    const tips = Array.from(root?.querySelectorAll(".series-list title") ?? []).map(
+      (node) => node.textContent,
+    );
     const consumptionTips = tips.filter((tip) => tip?.includes("Wh/km"));
     expect(consumptionTips).toHaveLength(1);
     expect(consumptionTips[0]).toContain("180 Wh/km");
     expect(tips.some((tip) => tip?.includes("40,5 km"))).toBe(true);
     expect(tips.some((tip) => tip?.includes("0,0 kWh"))).toBe(true);
-    const values = Array.from(root?.querySelectorAll(".series-value") ?? []).map((node) =>
-      node.textContent?.trim(),
+    const values = Array.from(root?.querySelectorAll(".series-list .series-value") ?? []).map(
+      (node) => node.textContent?.trim(),
     );
     expect(values).toEqual(["Dernier —", "Dernier 40,5 km", "Dernier 0,0 kWh"]);
-    expect(root?.querySelectorAll("rect.bar")).toHaveLength(4);
-    expect(root?.querySelectorAll("circle.dot")).toHaveLength(1);
+    expect(root?.querySelectorAll(".series-list rect.bar")).toHaveLength(4);
+    expect(root?.querySelectorAll(".series-list circle.dot")).toHaveLength(1);
     expect(root?.querySelector(".series-chart")?.getAttribute("role")).toBe("group");
+    const extraTitles = Array.from(root?.querySelectorAll(".series-extra .series-title") ?? []).map(
+      (node) => node.textContent,
+    );
+    expect(extraTitles).toEqual([
+      "Santé batterie",
+      "Charges AC/DC",
+      "Consommation à l'arrêt",
+      "Consommation vs température",
+    ]);
+    expect(root?.querySelector(".series-extra")?.textContent).toContain("0 % recharge rapide");
+    expect(root?.querySelector(".series-extra")?.textContent).toContain("2,00");
+    expect(root?.querySelector(".series-extra")?.textContent).toContain("0,05 /km");
+    expect(root?.querySelectorAll(".series-extra rect.bar.dc").length).toBeGreaterThan(0);
+    expect(root?.querySelector(".series-extra")?.textContent).toContain("10°");
 
     const totals = () => root?.querySelector(".totals");
     expect(totals()?.querySelector(".totals-label")?.textContent).toBe("Ce mois");
@@ -294,6 +330,8 @@ describe("charts view", () => {
     expect(totals()?.textContent).toContain("2 h 0 min");
     expect(totals()?.textContent).toContain("20,0 kWh");
     expect(totals()?.textContent).toContain("consommé 18,0 kWh");
+    expect(root?.querySelector(".series-extra")?.textContent).toContain("40 % recharge rapide");
+    expect(root?.querySelector(".series-extra")?.textContent).toContain("15,50");
 
     const weekStart = new Date(now);
     weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
