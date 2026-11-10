@@ -9,7 +9,7 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "tesla_logger"
 CARD_PATH: Final = "/tesla_logger/tesla-logger-card.js"
-CARD_VERSION: Final = "0.1.5"
+CARD_VERSION: Final = "0.1.6"
 
 CONF_URL: Final = "url"
 CONF_TOKEN: Final = "token"
@@ -31,11 +31,15 @@ SERVICE_GET_DRIVES: Final = "get_drives"
 SERVICE_GET_DRIVE: Final = "get_drive"
 SERVICE_GET_CHARGES: Final = "get_charges"
 SERVICE_GET_STATS: Final = "get_stats"
+SERVICE_GET_STATS_SERIES: Final = "get_stats_series"
+SERVICE_GET_CONSUMPTION_BY_TEMP: Final = "get_consumption_by_temp"
 SERVICES: Final = (
     SERVICE_GET_DRIVES,
     SERVICE_GET_DRIVE,
     SERVICE_GET_CHARGES,
     SERVICE_GET_STATS,
+    SERVICE_GET_STATS_SERIES,
+    SERVICE_GET_CONSUMPTION_BY_TEMP,
 )
 
 

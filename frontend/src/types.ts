@@ -34,9 +34,10 @@ export interface CardConfig {
   type?: string;
   entity: string;
   default_view?: ViewName;
+  show?: Partial<Record<string, boolean>>;
 }
 
-export type ViewName = "status" | "drives" | "drive" | "charges" | "stats";
+export type ViewName = "status" | "drives" | "drive" | "charges" | "stats" | "charts";
 export type Period = "week" | "month" | "year";
 
 export interface Drive {
@@ -93,4 +94,33 @@ export interface Stats {
   energy_used_kwh: number;
   charge_count: number;
   energy_added_kwh: number;
+}
+
+export interface StatsBucket {
+  start: string;
+  distance_km?: number | null;
+  energy_used_kwh?: number | null;
+  wh_per_km?: number | null;
+  energy_charged_kwh?: number | null;
+  drive_duration_s?: number | null;
+  drive_count?: number | null;
+  range_at_100_km?: number | null;
+  ac_energy_kwh?: number | null;
+  dc_energy_kwh?: number | null;
+  dc_share_pct?: number | null;
+  charge_cost?: number | null;
+  cost_per_km?: number | null;
+  idle_range_loss_km_per_day?: number | null;
+  idle_energy_loss_kwh_per_day?: number | null;
+}
+
+export interface TempBin {
+  temp_c_bucket: number;
+  wh_per_km?: number | null;
+  distance_km?: number | null;
+}
+
+export interface StatsSeries {
+  period?: Period;
+  buckets: StatsBucket[];
 }

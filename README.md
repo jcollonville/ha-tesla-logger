@@ -63,12 +63,14 @@ tesla-logger 0.1 stores more columns than its state endpoint returns. Charger vo
 
 ## Services
 
-All four services require a response (`SupportsResponse.ONLY`) and take the Home Assistant device id of the vehicle. They proxy the server and return its JSON.
+All six services require a response (`SupportsResponse.ONLY`) and take the Home Assistant device id of the vehicle. They proxy the server and return its JSON.
 
 - `tesla_logger.get_drives` — `device_id`, optional `from`, `to`, `page`, `per_page`
 - `tesla_logger.get_drive` — `device_id`, `drive_id`, optional `max_points` (route from `/api/v1/drives/{id}`)
 - `tesla_logger.get_charges` — same paging fields as drives
 - `tesla_logger.get_stats` — `device_id`, optional `from`, `to`
+- `tesla_logger.get_stats_series` — `device_id`, `period` (`week`, `month`, or `year`), optional `count` (buckets from `/api/v1/vehicles/{id}/stats/series`, oldest first)
+- `tesla_logger.get_consumption_by_temp` — same `period` and `count`; Wh/km by 5°C bin from `/api/v1/vehicles/{id}/stats/consumption_by_temp`
 
 ```yaml
 action: tesla_logger.get_stats
@@ -83,12 +85,33 @@ response_variable: tesla_stats
 
 No dashboard resource is required. The integration serves `tesla-logger-card.js` and registers it with `add_extra_js_url`.
 
-Add a **Tesla Logger** card and pick any entity from the vehicle. The card has four views:
+Add a **Tesla Logger** card and pick any entity from the vehicle. Every block is shown unless `show` says otherwise. A tab disappears when all of its blocks are hidden, and hidden blocks are not requested from the server.
+
+```yaml
+type: custom:tesla-logger-card
+entity: sensor.red_location
+show:
+  drives: true
+  charges: true
+  chart_consumption: true
+  chart_distance: true
+  chart_energy: true
+  totals: true
+  battery_health: true
+  charging_split: true
+  vampire_drain: true
+  consumption_vs_temp: true
+```
+
+`status` can be set the same way. Omitted keys stay visible. The visual editor exposes the same toggles.
+
+The card has five views:
 
 - Status: battery, range, activity, location, and the main readings
 - Drives: distance, duration, and consumption, with a detail view
 - Drive detail: Leaflet map (OpenStreetMap tiles) of the RDP route, plus speed, elevation, and battery charts
 - Charges and week / month / year stats
+- Charts (Graphiques): consumption, distance, and energy charged for the same periods
 
 The map loads tiles in the browser from OpenStreetMap. The server token is not part of that request.
 

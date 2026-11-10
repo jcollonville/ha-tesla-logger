@@ -2,9 +2,18 @@ import * as L from "leaflet";
 import leafletCss from "leaflet/dist/leaflet.css?inline";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { activityLabel, copy, language, type Copy, type Lang } from "./i18n";
-import { sparkline, seriesValues } from "./charts";
+import {
+  bucketLabel,
+  currentBucketIndex,
+  SERIES_COUNT,
+  seriesChart,
+  seriesValues,
+  sparkline,
+  type ChartPoint,
+} from "./charts";
 import {
   asRecord,
+  bucketInPeriod,
   detailLine,
   displayChargerType,
   formatDuration,
@@ -14,6 +23,15 @@ import {
   safeError,
   whPerKm,
 } from "./format";
+import {
+  SHOW_DEFAULTS,
+  SHOW_KEYS,
+  chartsVisible,
+  fallbackView,
+  seriesNeeded,
+  showFlags,
+  visibleViews,
+} from "./show-config";
 import type {
   CardConfig,
   Charge,
@@ -24,6 +42,9 @@ import type {
   Page,
   Period,
   Stats,
+  StatsBucket,
+  StatsSeries,
+  TempBin,
   ViewName,
 } from "./types";
 
@@ -44,6 +65,24 @@ function isStats(value: unknown): value is Stats {
   return Boolean(record && typeof record.distance_km === "number");
 }
 
+function isSeries(value: unknown): value is StatsSeries {
+  const record = asRecord(value);
+  return Boolean(record && Array.isArray(record.buckets));
+}
+
+function tempBins(value: unknown): TempBin[] {
+  const record = asRecord(value);
+  const rows = record && Array.isArray(record.data) ? record.data : [];
+  return rows.filter((row): row is TempBin => {
+    const item = asRecord(row);
+    return Boolean(item && typeof item.temp_c_bucket === "number");
+  });
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export class TeslaLoggerCard extends LitElement {
   static properties = {
     hass: { attribute: false },
@@ -53,6 +92,9 @@ export class TeslaLoggerCard extends LitElement {
     _charges: { state: true },
     _detail: { state: true },
     _stats: { state: true },
+    _series: { state: true },
+    _tempBins: { state: true },
+    _bucketIndex: { state: true },
     _period: { state: true },
     _page: { state: true },
     _loading: { state: true },
@@ -66,6 +108,10 @@ export class TeslaLoggerCard extends LitElement {
   private _charges?: Page<Charge>;
   private _detail?: DriveDetail;
   private _stats?: Stats;
+  private _series?: StatsSeries;
+  private _tempBins?: TempBin[];
+  private _seriesPeriod?: Period;
+  private _bucketIndex: number | null = null;
   private _period: Period = "month";
   private _page = 1;
   private _loading = false;
@@ -253,6 +299,162 @@ export class TeslaLoggerCard extends LitElement {
         stroke: var(--primary-color, #03a9f4);
         stroke-width: 2;
       }
+      .series-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 0 12px 8px;
+      }
+      .series-card {
+        margin: 0;
+        padding: 8px 8px 2px;
+        border-radius: 12px;
+        background: var(--secondary-background-color, rgba(127, 127, 127, 0.12));
+      }
+      .series-card figcaption {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+        padding: 0 4px 2px;
+      }
+      .series-title {
+        color: var(--primary-text-color, #212121);
+        font-size: 0.92rem;
+        font-weight: 700;
+      }
+      .series-value {
+        color: var(--secondary-text-color);
+        font-size: 0.8rem;
+      }
+      .series-chart {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .series-chart .grid {
+        stroke: var(--divider-color, rgba(127, 127, 127, 0.45));
+        stroke-width: 1;
+      }
+      .series-chart g[role="button"] {
+        cursor: pointer;
+      }
+      .series-chart .bar {
+        fill: var(--primary-color, #03a9f4);
+        opacity: 0.62;
+      }
+      .series-chart g.selected .bar,
+      .series-chart g[role="button"]:focus-visible .bar {
+        opacity: 1;
+        stroke: var(--primary-text-color, #212121);
+        stroke-width: 1.5;
+      }
+      .series-chart .hit {
+        fill: transparent;
+      }
+      .series-chart .line {
+        fill: none;
+        stroke: var(--primary-color, #03a9f4);
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .series-chart .dot {
+        fill: var(--primary-color, #03a9f4);
+        stroke: var(--card-background-color, #fff);
+        stroke-width: 1;
+        opacity: 0.75;
+      }
+      .series-chart g.selected .dot,
+      .series-chart g[role="button"]:focus-visible .dot {
+        opacity: 1;
+        stroke: var(--primary-text-color, #212121);
+        stroke-width: 2;
+      }
+      .totals {
+        margin: 0 12px 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: var(--secondary-background-color, rgba(127, 127, 127, 0.12));
+      }
+      .totals-label {
+        margin: 0 0 6px;
+        color: var(--primary-text-color, #212121);
+        font-size: 0.92rem;
+        font-weight: 700;
+      }
+      .totals-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .totals-row span {
+        display: block;
+        color: var(--secondary-text-color);
+        font-size: 0.75rem;
+      }
+      .totals-row strong {
+        display: block;
+        color: var(--primary-text-color, #212121);
+        font-size: 0.95rem;
+      }
+      .totals-sub {
+        margin-top: 2px;
+      }
+      .series-extra {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 0 12px 8px;
+      }
+      .series-card.compact {
+        padding: 6px 6px 0;
+      }
+      .series-card.compact .series-title {
+        font-size: 0.82rem;
+      }
+      .series-note {
+        margin: 0;
+        padding: 0 4px 2px;
+        color: var(--secondary-text-color);
+        font-size: 0.75rem;
+      }
+      .legend {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 0;
+        padding: 0 4px 2px;
+        color: var(--secondary-text-color);
+        font-size: 0.72rem;
+      }
+      .swatch {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin-right: 3px;
+        border-radius: 2px;
+      }
+      .swatch.ac {
+        background: var(--primary-color, #03a9f4);
+      }
+      .swatch.dc {
+        background: var(--accent-color, #ff9800);
+      }
+      .series-chart .bar.ac {
+        fill: var(--primary-color, #03a9f4);
+      }
+      .series-chart .bar.dc {
+        fill: var(--accent-color, #ff9800);
+      }
+      .series-chart.compact text {
+        font-size: 12px;
+      }
+      .series-chart text {
+        fill: var(--secondary-text-color, currentColor);
+        font-size: 11px;
+        font-family: inherit;
+      }
       .message, .toolbar {
         padding: 4px 16px 8px;
         color: var(--secondary-text-color);
@@ -273,6 +475,15 @@ export class TeslaLoggerCard extends LitElement {
         .entry {
           padding: 4px 8px;
         }
+        .totals-row {
+          gap: 4px;
+        }
+        .totals-row strong {
+          font-size: 0.85rem;
+        }
+        .series-extra {
+          grid-template-columns: 1fr;
+        }
       }
     `,
   ];
@@ -287,6 +498,18 @@ export class TeslaLoggerCard extends LitElement {
       this._view = config.default_view || "status";
       this.clearHistory();
     }
+    this.ensureVisibleView();
+  }
+
+  private get flags() {
+    return showFlags(this._config);
+  }
+
+  private ensureVisibleView(): void {
+    const next = fallbackView(this._view, this.flags);
+    if (next !== this._view) {
+      this._view = next;
+    }
   }
 
   static getConfigElement(): HTMLElement {
@@ -297,7 +520,7 @@ export class TeslaLoggerCard extends LitElement {
     const entity =
       Object.keys(hass.states).find((id) => hass.states[id]?.attributes?.key === "location") ||
       "";
-    return { entity };
+    return { entity, show: { ...SHOW_DEFAULTS } };
   }
 
   getCardSize(): number {
@@ -329,10 +552,7 @@ export class TeslaLoggerCard extends LitElement {
       <ha-card>
         ${this.header()}
         <div class="tabs" role="tablist">
-          ${this.tab("status", this.text.status)}
-          ${this.tab("drives", this.text.drives)}
-          ${this.tab("charges", this.text.charges)}
-          ${this.tab("stats", this.text.stats)}
+          ${visibleViews(this.flags).map((view) => this.tab(view, this.text[view]))}
         </div>
         ${this._error ? html`<p class="message">${this._error}</p>` : nothing}
         ${this._loading ? html`<p class="message">${this.text.loading}</p>` : nothing}
@@ -484,6 +704,9 @@ export class TeslaLoggerCard extends LitElement {
     if (this._view === "charges") {
       return this.charges();
     }
+    if (this._view === "charts") {
+      return this.charts();
+    }
     return this.stats();
   }
 
@@ -584,18 +807,7 @@ export class TeslaLoggerCard extends LitElement {
     const stats = this._stats;
     const efficiency = whPerKm(stats?.energy_used_kwh, stats?.distance_km);
     return html`
-      <div class="periods">
-        ${(["week", "month", "year"] as Period[]).map(
-          (period) => html`
-            <button
-              class=${this._period === period ? "active" : ""}
-              @click=${() => this.setPeriod(period)}
-            >
-              ${this.text[period]}
-            </button>
-          `,
-        )}
-      </div>
+      ${this.periodBar()}
       ${stats
         ? html`
             <div class="grid">
@@ -613,6 +825,280 @@ export class TeslaLoggerCard extends LitElement {
           `
         : nothing}
     `;
+  }
+
+  private periodBar() {
+    return html`
+      <div class="periods" role="group" aria-label=${this.text.period}>
+        ${(["week", "month", "year"] as Period[]).map(
+          (period) => html`
+            <button
+              type="button"
+              aria-pressed=${this._period === period ? "true" : "false"}
+              class=${this._period === period ? "active" : ""}
+              @click=${() => this.setPeriod(period)}
+            >
+              ${this.text[period]}
+            </button>
+          `,
+        )}
+      </div>
+    `;
+  }
+
+  private charts() {
+    const show = this.flags;
+    const series = this._series;
+    const buckets = series?.buckets ?? [];
+    const selected = buckets.length ? this.selectedBucketIndex(buckets) : -1;
+    const main = show.chart_consumption || show.chart_distance || show.chart_energy;
+    const extra =
+      show.battery_health ||
+      show.charging_split ||
+      show.vampire_drain ||
+      show.consumption_vs_temp;
+    return html`
+      ${this.periodBar()}
+      ${main && series && buckets.length === 0
+        ? html`<p class="message">${this.text.emptySeries}</p>`
+        : nothing}
+      ${main && buckets.length
+        ? html`
+            <div class="series-list">
+              ${show.chart_consumption
+                ? this.seriesFigure(
+                    "line",
+                    this.text.consumptionChart,
+                    "Wh/km",
+                    (bucket) => finiteOrNull(bucket.wh_per_km),
+                    selected,
+                  )
+                : nothing}
+              ${show.chart_distance
+                ? this.seriesFigure(
+                    "bar",
+                    this.text.distance,
+                    "km",
+                    (bucket) => finiteOrNull(bucket.distance_km),
+                    selected,
+                  )
+                : nothing}
+              ${show.chart_energy
+                ? this.seriesFigure(
+                    "bar",
+                    this.text.chargedChart,
+                    "kWh",
+                    (bucket) => finiteOrNull(bucket.energy_charged_kwh),
+                    selected,
+                  )
+                : nothing}
+            </div>
+          `
+        : nothing}
+      ${show.totals && selected >= 0 ? this.bucketTotals(buckets[selected]) : nothing}
+      ${extra
+        ? html`
+            <div class="series-extra">
+              ${show.battery_health && selected >= 0
+                ? this.seriesFigure(
+                    "line",
+                    this.text.batteryHealth,
+                    "km",
+                    (bucket) => finiteOrNull(bucket.range_at_100_km),
+                    selected,
+                    true,
+                  )
+                : nothing}
+              ${show.charging_split && selected >= 0 ? this.acDcFigure(buckets, selected) : nothing}
+              ${show.vampire_drain && selected >= 0
+                ? this.seriesFigure(
+                    "bar",
+                    this.text.idleUse,
+                    "km/j",
+                    (bucket) => finiteOrNull(bucket.idle_range_loss_km_per_day),
+                    selected,
+                    true,
+                  )
+                : nothing}
+              ${show.consumption_vs_temp ? this.tempFigure() : nothing}
+            </div>
+          `
+        : nothing}
+    `;
+  }
+
+  private selectedBucketIndex(buckets: StatsBucket[]): number {
+    if (
+      this._bucketIndex != null &&
+      this._bucketIndex >= 0 &&
+      this._bucketIndex < buckets.length
+    ) {
+      return this._bucketIndex;
+    }
+    return currentBucketIndex(
+      buckets.map((bucket) => bucket.start),
+      this._period,
+    );
+  }
+
+  private selectBucket(index: number): void {
+    this._bucketIndex = index;
+  }
+
+  private bucketHeading(bucket: StatsBucket): string {
+    if (bucketInPeriod(bucket.start, this._period)) {
+      if (this._period === "week") {
+        return this.text.thisWeek;
+      }
+      if (this._period === "month") {
+        return this.text.thisMonth;
+      }
+      return this.text.thisYear;
+    }
+    return bucketLabel(bucket.start, this._period, this.cardLang);
+  }
+
+  private bucketTotals(bucket: StatsBucket) {
+    const consumed = finiteOrNull(bucket.energy_used_kwh);
+    return html`
+      <section class="totals" aria-live="polite">
+        <h3 class="totals-label">${this.bucketHeading(bucket)}</h3>
+        <div class="totals-row">
+          <div>
+            <span>${this.text.distance}</span>
+            <strong>${this.km(bucket.distance_km)}</strong>
+          </div>
+          <div>
+            <span>${this.text.duration}</span>
+            <strong>${formatDuration(bucket.drive_duration_s)}</strong>
+          </div>
+          <div>
+            <span>${this.text.chargedChart}</span>
+            <strong>${this.kwh(bucket.energy_charged_kwh)}</strong>
+            ${consumed == null
+              ? nothing
+              : html`<span class="totals-sub">${this.text.consumed} ${this.kwh(consumed)}</span>`}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  private seriesFigure(
+    kind: "bar" | "line" | "stack",
+    title: string,
+    unit: string,
+    read: (bucket: StatsBucket) => number | null,
+    selected: number,
+    compact = false,
+  ) {
+    const buckets = this._series?.buckets ?? [];
+    const digits = unit === "Wh/km" ? 0 : 1;
+    const points: ChartPoint[] = buckets.map((bucket) => {
+      const value = read(bucket);
+      const label = bucketLabel(bucket.start, this._period, this.cardLang);
+      const shown = value == null ? "—" : `${formatNumber(value, digits, this.cardLang)} ${unit}`;
+      return { label, value, title: `${label} · ${shown}` };
+    });
+    const focus = compact ? points[selected] : points[points.length - 1];
+    const headline = compact ? this.bucketHeading(buckets[selected]) : this.text.latest;
+    const focusText =
+      focus?.value == null ? "—" : `${formatNumber(focus.value, digits, this.cardLang)} ${unit}`;
+    const summary = `${title}. ${headline} ${focusText}`;
+    return html`
+      <figure class=${compact ? "series-card compact" : "series-card"}>
+        <figcaption>
+          <span class="series-title">${title}</span>
+          <span class="series-value">${headline} ${focusText}</span>
+        </figcaption>
+        ${this.drawSeries(points, kind, summary, selected, compact)}
+      </figure>
+    `;
+  }
+
+  private acDcFigure(buckets: StatsBucket[], selected: number) {
+    const bucket = buckets[selected];
+    const share = finiteOrNull(bucket?.dc_share_pct);
+    const cost = finiteOrNull(bucket?.charge_cost);
+    const perKm = finiteOrNull(bucket?.cost_per_km);
+    const points: ChartPoint[] = buckets.map((item) => {
+      const label = bucketLabel(item.start, this._period, this.cardLang);
+      const ac = finiteOrNull(item.ac_energy_kwh);
+      const dc = finiteOrNull(item.dc_energy_kwh);
+      const acText = ac == null ? "—" : `${formatNumber(ac, 1, this.cardLang)} kWh`;
+      const dcText = dc == null ? "—" : `${formatNumber(dc, 1, this.cardLang)} kWh`;
+      return {
+        label,
+        value: ac,
+        stack: dc,
+        title: `${label} · AC ${acText} · DC ${dcText}`,
+      };
+    });
+    const summary = `${this.text.acDc}. ${this.bucketHeading(bucket)}`;
+    return html`
+      <figure class="series-card compact">
+        <figcaption>
+          <span class="series-title">${this.text.acDc}</span>
+        </figcaption>
+        <p class="series-note">
+          ${share == null
+            ? nothing
+            : html`${formatNumber(share, 0, this.cardLang)} % ${this.text.fastShare}`}
+          ${cost == null
+            ? nothing
+            : html`${share == null ? "" : " · "}${this.text.cost} ${formatNumber(cost, 2, this.cardLang)}`}
+          ${perKm == null
+            ? nothing
+            : html`<span class="totals-sub">${formatNumber(perKm, 2, this.cardLang)} ${this.text.perKm}</span>`}
+        </p>
+        <p class="legend">
+          <span><i class="swatch ac" aria-hidden="true"></i>AC</span>
+          <span><i class="swatch dc" aria-hidden="true"></i>DC</span>
+        </p>
+        ${this.drawSeries(points, "stack", summary, selected, true)}
+      </figure>
+    `;
+  }
+
+  private tempFigure() {
+    const bins = this._tempBins ?? [];
+    const points: ChartPoint[] = bins.map((bin) => {
+      const lower = bin.temp_c_bucket;
+      const label = `${formatNumber(lower, 0, this.cardLang)}–${formatNumber(lower + 5, 0, this.cardLang)}°`;
+      const wh = finiteOrNull(bin.wh_per_km);
+      const distance = finiteOrNull(bin.distance_km);
+      const whText = wh == null ? "—" : `${formatNumber(wh, 0, this.cardLang)} Wh/km`;
+      const distanceText =
+        distance == null ? "" : ` · ${formatNumber(distance, 0, this.cardLang)} km`;
+      return { label, value: wh, title: `${label} · ${whText}${distanceText}` };
+    });
+    return html`
+      <figure class="series-card compact">
+        <figcaption>
+          <span class="series-title">${this.text.tempUse}</span>
+        </figcaption>
+        ${points.length
+          ? this.drawSeries(points, "bar", this.text.tempUse, -1, true, false)
+          : html`<p class="message">${this.text.emptySeries}</p>`}
+      </figure>
+    `;
+  }
+
+  private drawSeries(
+    points: ChartPoint[],
+    kind: "bar" | "line" | "stack",
+    label: string,
+    selected: number,
+    compact: boolean,
+    selectable = true,
+  ) {
+    const formatTick = (value: number) =>
+      formatNumber(value, value >= 10 || value === 0 ? 0 : 1, this.cardLang);
+    return seriesChart(points, kind, label, formatTick, {
+      compact,
+      selected,
+      onSelect: selectable ? (index) => this.selectBucket(index) : undefined,
+    });
   }
 
   private chart(
@@ -735,6 +1221,11 @@ export class TeslaLoggerCard extends LitElement {
 
   private setPeriod(period: Period): void {
     this._period = period;
+    this._bucketIndex = null;
+    if (this._view === "charts") {
+      void this.loadSeries();
+      return;
+    }
     this._stats = undefined;
     void this.loadStats();
   }
@@ -760,18 +1251,24 @@ export class TeslaLoggerCard extends LitElement {
     this._charges = undefined;
     this._detail = undefined;
     this._stats = undefined;
+    this._series = undefined;
+    this._tempBins = undefined;
+    this._seriesPeriod = undefined;
+    this._bucketIndex = null;
     this._page = 1;
     this._error = "";
   }
 
   private async ensureView(): Promise<void> {
-    if (this._view === "drives" && !this._drives) {
+    if (this._view === "drives" && this.flags.drives && !this._drives) {
       await this.loadDrives();
-    } else if (this._view === "charges" && !this._charges) {
+    } else if (this._view === "charges" && this.flags.charges && !this._charges) {
       await this.loadCharges();
     } else if (this._view === "stats" && !this._stats) {
       await this.loadStats();
-    } else if (this._view === "drive" && this._driveId != null && !this._detail) {
+    } else if (this._view === "charts" && chartsVisible(this.flags) && this.seriesStale()) {
+      await this.loadSeries();
+    } else if (this._view === "drive" && this.flags.drives && this._driveId != null && !this._detail) {
       await this.loadDrive();
     }
   }
@@ -807,6 +1304,54 @@ export class TeslaLoggerCard extends LitElement {
         throw new Error(this.text.failed);
       }
       this._detail = payload;
+    });
+  }
+
+  private seriesStale(): boolean {
+    const show = this.flags;
+    if (this._seriesPeriod !== this._period) {
+      return true;
+    }
+    if (seriesNeeded(show) && !this._series) {
+      return true;
+    }
+    if (show.consumption_vs_temp && !this._tempBins) {
+      return true;
+    }
+    return false;
+  }
+
+  private async loadSeries(): Promise<void> {
+    const show = this.flags;
+    if (!chartsVisible(show)) {
+      return;
+    }
+    const period = this._period;
+    const wantSeries = seriesNeeded(show);
+    const wantTemp = show.consumption_vs_temp;
+    if (wantSeries) {
+      this._series = undefined;
+    }
+    if (wantTemp) {
+      this._tempBins = undefined;
+    }
+    await this.load("charts", async () => {
+      const count = SERIES_COUNT[period];
+      if (wantSeries) {
+        const payload = await this.call("get_stats_series", { period, count });
+        if (!isSeries(payload)) {
+          throw new Error(this.text.failed);
+        }
+        this._series = payload;
+      }
+      if (wantTemp) {
+        try {
+          this._tempBins = tempBins(await this.call("get_consumption_by_temp", { period, count }));
+        } catch {
+          this._tempBins = [];
+        }
+      }
+      this._seriesPeriod = period;
     });
   }
 
@@ -920,6 +1465,23 @@ export class TeslaLoggerCard extends LitElement {
   }
 }
 
+function fieldLabel(name: string, text: Copy): string {
+  const key = name.split(".").pop() ?? name;
+  if (key === "entity") {
+    return text.entity;
+  }
+  if (key === "default_view") {
+    return text.defaultView;
+  }
+  if (key === "show") {
+    return text.showBlocks;
+  }
+  if (key in text.showFields) {
+    return text.showFields[key as keyof typeof text.showFields];
+  }
+  return name;
+}
+
 const SCHEMA = [
   {
     name: "entity",
@@ -935,9 +1497,16 @@ const SCHEMA = [
           { value: "drives", label: "Drives" },
           { value: "charges", label: "Charges" },
           { value: "stats", label: "Stats" },
+          { value: "charts", label: "Charts" },
         ],
       },
     },
+  },
+  {
+    name: "show",
+    type: "grid",
+    column_min_width: "200px",
+    schema: SHOW_KEYS.map((name) => ({ name, selector: { boolean: {} } })),
   },
 ];
 
@@ -951,7 +1520,7 @@ class TeslaLoggerCardEditor extends LitElement {
   private _config?: CardConfig;
 
   setConfig(config: CardConfig): void {
-    this._config = config;
+    this._config = { ...config, show: showFlags(config) };
   }
 
   override render() {
@@ -964,10 +1533,10 @@ class TeslaLoggerCardEditor extends LitElement {
         .hass=${this.hass}
         .data=${this._config}
         .schema=${SCHEMA}
-        .computeLabel=${(schema: { name: string }) =>
-          schema.name === "entity" ? text.entity : text.defaultView}
+        .computeLabel=${(schema: { name: string }) => fieldLabel(schema.name, text)}
         @value-changed=${(event: CustomEvent<{ value: CardConfig }>) => {
-          this._config = { ...this._config, ...event.detail.value };
+          const next = { ...this._config, ...event.detail.value };
+          this._config = { ...next, show: showFlags(next) };
           this.dispatchEvent(
             new CustomEvent("config-changed", {
               detail: { config: this._config },

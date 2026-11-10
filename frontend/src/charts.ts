@@ -1,4 +1,261 @@
-import { svg } from "lit";
+import { svg, type SVGTemplateResult } from "lit";
+import { bucketInPeriod } from "./format";
+import type { Lang } from "./i18n";
+import type { Period } from "./types";
+
+/** Buckets requested for each chart period. Oldest to newest. */
+export const SERIES_COUNT: Record<Period, number> = {
+  week: 12,
+  month: 12,
+  year: 5,
+};
+
+const CHART_WIDTH = 360;
+const CHART_HEIGHT = 168;
+const PLOT_LEFT = 42;
+const PLOT_RIGHT = 10;
+const PLOT_TOP = 12;
+const PLOT_BOTTOM = 28;
+
+export interface ChartPoint {
+  label: string;
+  value: number | null;
+  /** Second segment drawn above `value` for stacked bars. */
+  stack?: number | null;
+  title: string;
+}
+
+export function niceMax(max: number): number {
+  if (!Number.isFinite(max) || max <= 0) {
+    return 1;
+  }
+  const pow = 10 ** Math.floor(Math.log10(max));
+  const fraction = max / pow;
+  const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  return nice * pow;
+}
+
+export function currentBucketIndex(
+  starts: readonly string[],
+  period: Period,
+  now = new Date(),
+): number {
+  let found = -1;
+  starts.forEach((start, index) => {
+    if (bucketInPeriod(start, period, now)) {
+      found = index;
+    }
+  });
+  return found >= 0 ? found : Math.max(0, starts.length - 1);
+}
+
+export function bucketLabel(start: string, period: Period, lang: Lang): string {
+  const date = new Date(start);
+  if (Number.isNaN(date.getTime())) {
+    return start;
+  }
+  const locale = lang === "fr" ? "fr-FR" : "en-US";
+  if (period === "year") {
+    return new Intl.DateTimeFormat(locale, { year: "numeric" }).format(date);
+  }
+  if (period === "month") {
+    return new Intl.DateTimeFormat(locale, { month: "short" })
+      .format(date)
+      .replace(/\.$/, "");
+  }
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" })
+    .format(date)
+    .replace(/,/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export interface SeriesChartOptions {
+  selected?: number;
+  onSelect?: (index: number) => void;
+  compact?: boolean;
+}
+
+export function seriesChart(
+  points: ChartPoint[],
+  kind: "bar" | "line" | "stack",
+  label: string,
+  formatTick: (value: number) => string,
+  options: SeriesChartOptions = {},
+) {
+  const box = options.compact
+    ? { width: 200, height: 112, left: 32, right: 6, top: 8, bottom: 20 }
+    : {
+        width: CHART_WIDTH,
+        height: CHART_HEIGHT,
+        left: PLOT_LEFT,
+        right: PLOT_RIGHT,
+        top: PLOT_TOP,
+        bottom: PLOT_BOTTOM,
+      };
+  const magnitudes = points.map((point) => {
+    if (kind === "stack") {
+      return Math.max(0, point.value ?? 0) + Math.max(0, point.stack ?? 0);
+    }
+    return point.value != null && Number.isFinite(point.value) && point.value > 0 ? point.value : 0;
+  });
+  const positive = magnitudes.filter((value) => value > 0);
+  const max = niceMax(positive.length ? Math.max(...positive) : 0);
+  const plotWidth = box.width - box.left - box.right;
+  const plotHeight = box.height - box.top - box.bottom;
+  const slot = points.length > 0 ? plotWidth / points.length : plotWidth;
+  const yOf = (value: number) => box.top + plotHeight - (value / max) * plotHeight;
+  const baseline = yOf(0);
+  const ticks = [max, max / 2, 0];
+  const slots = points.map((point, index) => {
+    const x = box.left + slot * index + slot / 2;
+    const value = point.value != null && Number.isFinite(point.value) ? point.value : null;
+    const y = value == null ? null : yOf(Math.max(0, value));
+    return { ...point, x, y, value };
+  });
+  const labelStep = points.length > 8 ? 2 : 1;
+  const selectable = (index: number, title: string, body: SVGTemplateResult) => {
+    if (!options.onSelect) {
+      return svg`<g><title>${title}</title>${body}</g>`;
+    }
+    const selected = options.selected === index;
+    return svg`
+      <g
+        class=${selected ? "selected" : ""}
+        role="button"
+        tabindex="0"
+        aria-pressed=${selected ? "true" : "false"}
+        aria-label=${title}
+        @click=${() => options.onSelect?.(index)}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            options.onSelect?.(index);
+          }
+        }}
+      >
+        <title>${title}</title>
+        ${body}
+      </g>
+    `;
+  };
+  const bars =
+    kind === "line"
+      ? []
+      : slots.map((point, index) => {
+          const barWidth = Math.min(options.compact ? 16 : 22, slot * 0.62);
+          const x = (point.x - barWidth / 2).toFixed(1);
+          const hit = svg`
+            <rect
+              class="hit"
+              x=${(point.x - slot / 2).toFixed(1)}
+              y=${box.top}
+              width=${slot.toFixed(1)}
+              height=${plotHeight}
+            ></rect>
+          `;
+          if (kind === "stack") {
+            const segments = [
+              { amount: Math.max(0, point.value ?? 0), className: "bar ac" },
+              { amount: Math.max(0, point.stack ?? 0), className: "bar dc" },
+            ];
+            let cursor = 0;
+            const rects = segments.map((segment) => {
+              const bottom = yOf(cursor);
+              cursor += segment.amount;
+              const top = yOf(cursor);
+              const height = Math.max(0, bottom - top);
+              if (height <= 0) {
+                return svg``;
+              }
+              return svg`
+                <rect
+                  class=${segment.className}
+                  x=${x}
+                  y=${top.toFixed(1)}
+                  width=${barWidth.toFixed(1)}
+                  height=${height.toFixed(1)}
+                  rx="2"
+                ></rect>
+              `;
+            });
+            return selectable(index, point.title, svg`${hit}${rects}`);
+          }
+          const y = point.y ?? baseline;
+          const height = Math.max(0, baseline - y);
+          return selectable(
+            index,
+            point.title,
+            svg`
+              ${hit}
+              <rect
+                class="bar"
+                x=${x}
+                y=${y.toFixed(1)}
+                width=${barWidth.toFixed(1)}
+                height=${height.toFixed(1)}
+                rx="2"
+              ></rect>
+            `,
+          );
+        });
+  const lineParts: string[] = [];
+  let penDown = false;
+  if (kind === "line") {
+    for (const point of slots) {
+      if (point.y == null) {
+        penDown = false;
+        continue;
+      }
+      lineParts.push(`${penDown ? "L" : "M"}${point.x.toFixed(1)},${point.y.toFixed(1)}`);
+      penDown = true;
+    }
+  }
+  const lineDots =
+    kind === "line"
+      ? slots.map((point, index) => {
+          if (point.y == null) {
+            return svg``;
+          }
+          return selectable(
+            index,
+            point.title,
+            svg`
+              <circle class="hit" cx=${point.x.toFixed(1)} cy=${point.y!.toFixed(1)} r="12"></circle>
+              <circle class="dot" cx=${point.x.toFixed(1)} cy=${point.y!.toFixed(1)} r="3.5"></circle>
+            `,
+          );
+        })
+      : [];
+  return svg`
+    <svg
+      class=${options.compact ? "series-chart compact" : "series-chart"}
+      viewBox=${`0 0 ${box.width} ${box.height}`}
+      role="group"
+      aria-label=${label}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      ${ticks.map((tick) => {
+        const y = yOf(tick);
+        return svg`
+          <line class="grid" x1=${box.left} y1=${y.toFixed(1)} x2=${box.width - box.right} y2=${y.toFixed(1)}></line>
+          <text class="y-label" x=${box.left - 4} y=${(y + 4).toFixed(1)} text-anchor="end">
+            ${formatTick(tick)}
+          </text>
+        `;
+      })}
+      ${bars}
+      ${lineParts.length > 1 ? svg`<path class="line" d=${lineParts.join(" ")}></path>` : svg``}
+      ${lineDots}
+      ${slots.map(
+        (point, index) =>
+          index % labelStep === 0 || index === slots.length - 1
+            ? svg`<text class="x-label" x=${point.x.toFixed(1)} y=${box.height - 6} text-anchor="middle">${point.label}</text>`
+            : svg``,
+      )}
+    </svg>
+  `;
+}
 
 export function seriesValues(points: ReadonlyArray<object>, key: string): number[] {
   const values: number[] = [];
