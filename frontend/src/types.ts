@@ -101,6 +101,8 @@ export interface StatsBucket {
   energy_used_kwh?: number | null;
   wh_per_km?: number | null;
   energy_charged_kwh?: number | null;
+  drive_duration_s?: number | null;
+  drive_count?: number | null;
 }
 
 export interface StatsSeries {

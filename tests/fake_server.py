@@ -265,6 +265,8 @@ def make_app(state: FakeState) -> web.Application:
                         "energy_used_kwh": 18.0,
                         "wh_per_km": 180.0,
                         "energy_charged_kwh": 20.0,
+                        "drive_duration_s": 7200,
+                        "drive_count": 4,
                     },
                     {
                         "start": "2026-11-01T00:00:00Z",
@@ -272,6 +274,8 @@ def make_app(state: FakeState) -> web.Application:
                         "energy_used_kwh": None,
                         "wh_per_km": None,
                         "energy_charged_kwh": 25.0,
+                        "drive_duration_s": 5400,
+                        "drive_count": 2,
                     },
                 ],
             }

@@ -211,24 +211,32 @@ describe("history lists", () => {
 
 describe("charts view", () => {
   it("draws consumption, distance, and energy charged on one French view", async () => {
-    const october = new Date(2026, 9, 15).toISOString();
-    const november = new Date(2026, 10, 15).toISOString();
+    const now = new Date();
+    const previous = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString();
+    const current = new Date(now.getFullYear(), now.getMonth(), 15).toISOString();
+    const previousLabel = new Intl.DateTimeFormat("fr-FR", { month: "short" })
+      .format(new Date(previous))
+      .replace(/\.$/, "");
     const series: StatsSeries = {
       period: "month",
       buckets: [
         {
-          start: october,
+          start: previous,
           distance_km: 100,
           energy_used_kwh: 18,
           wh_per_km: 180,
           energy_charged_kwh: 20,
+          drive_duration_s: 7200,
+          drive_count: 4,
         },
         {
-          start: november,
+          start: current,
           distance_km: 40.5,
           energy_used_kwh: null,
           wh_per_km: null,
           energy_charged_kwh: 0,
+          drive_duration_s: 5400,
+          drive_count: 1,
         },
       ],
     };
@@ -266,7 +274,64 @@ describe("charts view", () => {
     expect(values).toEqual(["Dernier —", "Dernier 40,5 km", "Dernier 0,0 kWh"]);
     expect(root?.querySelectorAll("rect.bar")).toHaveLength(4);
     expect(root?.querySelectorAll("circle.dot")).toHaveLength(1);
-    expect(root?.querySelector(".series-chart")?.getAttribute("role")).toBe("img");
+    expect(root?.querySelector(".series-chart")?.getAttribute("role")).toBe("group");
+
+    const totals = () => root?.querySelector(".totals");
+    expect(totals()?.querySelector(".totals-label")?.textContent).toBe("Ce mois");
+    expect(totals()?.textContent).toContain("40,5 km");
+    expect(totals()?.textContent).toContain("1 h 30 min");
+    expect(totals()?.textContent).toContain("0,0 kWh");
+    expect(totals()?.textContent).not.toContain("consommé");
+
+    const distanceMarks = root?.querySelectorAll("figure.series-card")[1]?.querySelectorAll(
+      "[role='button']",
+    );
+    expect(distanceMarks?.[1]?.getAttribute("aria-pressed")).toBe("true");
+    distanceMarks?.[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await card.updateComplete;
+    expect(totals()?.querySelector(".totals-label")?.textContent).toBe(previousLabel);
+    expect(totals()?.textContent).toContain("100,0 km");
+    expect(totals()?.textContent).toContain("2 h 0 min");
+    expect(totals()?.textContent).toContain("20,0 kWh");
+    expect(totals()?.textContent).toContain("consommé 18,0 kWh");
+
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    weekStart.setHours(12, 0, 0, 0);
+    const callService = vi.fn().mockResolvedValue({
+      response: {
+        period: "week",
+        buckets: [
+          {
+            start: weekStart.toISOString(),
+            distance_km: 12,
+            energy_used_kwh: 2.5,
+            wh_per_km: 208,
+            energy_charged_kwh: 4,
+            drive_duration_s: 3600,
+            drive_count: 1,
+          },
+        ],
+      },
+    });
+    card.hass = { ...card.hass, callService } as HomeAssistant;
+    const week = Array.from(root?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Semaine",
+    );
+    week?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await vi.waitFor(() => {
+      expect(card.shadowRoot?.querySelector(".totals-label")?.textContent).toBe("Cette semaine");
+    });
+    const weekTotals = card.shadowRoot?.querySelector(".totals")?.textContent ?? "";
+    expect(weekTotals).toContain("12,0 km");
+    expect(weekTotals).toContain("1 h 0 min");
+    expect(weekTotals).toContain("4,0 kWh");
+    expect(weekTotals).toContain("consommé 2,5 kWh");
+    expect(callService.mock.calls[0]?.[2]).toEqual({
+      device_id: "device-1",
+      period: "week",
+      count: 12,
+    });
   });
 
   it("requests get_stats_series for the selected period", async () => {

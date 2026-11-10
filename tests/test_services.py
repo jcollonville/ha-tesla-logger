@@ -83,6 +83,8 @@ async def test_services_return_history(hass, logger_server, enable_custom_integr
     )
     assert series["period"] == "month"
     assert series["buckets"][0]["wh_per_km"] == 180
+    assert series["buckets"][0]["drive_duration_s"] == 7200
+    assert series["buckets"][0]["drive_count"] == 4
     assert series["buckets"][1]["wh_per_km"] is None
     assert series["buckets"][0]["start"] < series["buckets"][1]["start"]
     assert _state.series_calls == [{"id": "1", "period": "month", "count": "6"}]

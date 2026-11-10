@@ -1,4 +1,5 @@
 import type { Lang } from "./i18n";
+import type { Period } from "./types";
 
 export function formatNumber(value: number, digits: number, lang: Lang): string {
   return value.toLocaleString(lang === "fr" ? "fr-FR" : "en-US", {
@@ -83,8 +84,7 @@ export function whPerKm(
   return (energyKwh * 1000) / distanceKm;
 }
 
-export function periodRange(period: "week" | "month" | "year"): { from: string; to: string } {
-  const now = new Date();
+export function periodBounds(period: Period, now = new Date()): { start: Date; end: Date } {
   const start = new Date(now);
   if (period === "week") {
     const monday = (start.getDay() + 6) % 7;
@@ -95,7 +95,29 @@ export function periodRange(period: "week" | "month" | "year"): { from: string; 
     start.setMonth(0, 1);
   }
   start.setHours(0, 0, 0, 0);
-  return { from: start.toISOString(), to: now.toISOString() };
+  const end = new Date(start);
+  if (period === "week") {
+    end.setDate(end.getDate() + 7);
+  } else if (period === "month") {
+    end.setMonth(end.getMonth() + 1);
+  } else {
+    end.setFullYear(end.getFullYear() + 1);
+  }
+  return { start, end };
+}
+
+export function bucketInPeriod(startIso: string, period: Period, now = new Date()): boolean {
+  const time = new Date(startIso).getTime();
+  if (Number.isNaN(time)) {
+    return false;
+  }
+  const { start, end } = periodBounds(period, now);
+  return time >= start.getTime() && time < end.getTime();
+}
+
+export function periodRange(period: Period): { from: string; to: string } {
+  const now = new Date();
+  return { from: periodBounds(period, now).start.toISOString(), to: now.toISOString() };
 }
 
 function errorText(err: unknown): string {

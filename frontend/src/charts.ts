@@ -1,4 +1,5 @@
-import { svg } from "lit";
+import { svg, type SVGTemplateResult } from "lit";
+import { bucketInPeriod } from "./format";
 import type { Lang } from "./i18n";
 import type { Period } from "./types";
 
@@ -32,6 +33,20 @@ export function niceMax(max: number): number {
   return nice * pow;
 }
 
+export function currentBucketIndex(
+  starts: readonly string[],
+  period: Period,
+  now = new Date(),
+): number {
+  let found = -1;
+  starts.forEach((start, index) => {
+    if (bucketInPeriod(start, period, now)) {
+      found = index;
+    }
+  });
+  return found >= 0 ? found : Math.max(0, starts.length - 1);
+}
+
 export function bucketLabel(start: string, period: Period, lang: Lang): string {
   const date = new Date(start);
   if (Number.isNaN(date.getTime())) {
@@ -53,11 +68,17 @@ export function bucketLabel(start: string, period: Period, lang: Lang): string {
     .trim();
 }
 
+export interface SeriesChartOptions {
+  selected?: number;
+  onSelect?: (index: number) => void;
+}
+
 export function seriesChart(
   points: ChartPoint[],
   kind: "bar" | "line",
   label: string,
   formatTick: (value: number) => string,
+  options: SeriesChartOptions = {},
 ) {
   const finite = points
     .map((point) => point.value)
@@ -76,15 +97,38 @@ export function seriesChart(
     return { ...point, x, y, value };
   });
   const labelStep = points.length > 8 ? 2 : 1;
+  const selectable = (index: number, title: string, body: SVGTemplateResult) => {
+    const selected = options.selected === index;
+    return svg`
+      <g
+        class=${selected ? "selected" : ""}
+        role="button"
+        tabindex="0"
+        aria-pressed=${selected ? "true" : "false"}
+        aria-label=${title}
+        @click=${() => options.onSelect?.(index)}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            options.onSelect?.(index);
+          }
+        }}
+      >
+        <title>${title}</title>
+        ${body}
+      </g>
+    `;
+  };
   const bars =
     kind === "bar"
-      ? slots.map((point) => {
+      ? slots.map((point, index) => {
           const barWidth = Math.min(22, slot * 0.62);
           const y = point.y ?? baseline;
           const height = Math.max(0, baseline - y);
-          return svg`
-            <g>
-              <title>${point.title}</title>
+          return selectable(
+            index,
+            point.title,
+            svg`
               <rect
                 class="hit"
                 x=${(point.x - slot / 2).toFixed(1)}
@@ -100,8 +144,8 @@ export function seriesChart(
                 height=${height.toFixed(1)}
                 rx="2"
               ></rect>
-            </g>
-          `;
+            `,
+          );
         })
       : [];
   const lineParts: string[] = [];
@@ -118,22 +162,25 @@ export function seriesChart(
   }
   const lineDots =
     kind === "line"
-      ? slots
-          .filter((point) => point.y != null)
-          .map(
-            (point) => svg`
-              <g>
-                <title>${point.title}</title>
-                <circle class="dot" cx=${point.x.toFixed(1)} cy=${point.y!.toFixed(1)} r="3.5"></circle>
-              </g>
+      ? slots.map((point, index) => {
+          if (point.y == null) {
+            return svg``;
+          }
+          return selectable(
+            index,
+            point.title,
+            svg`
+              <circle class="hit" cx=${point.x.toFixed(1)} cy=${point.y!.toFixed(1)} r="12"></circle>
+              <circle class="dot" cx=${point.x.toFixed(1)} cy=${point.y!.toFixed(1)} r="3.5"></circle>
             `,
-          )
+          );
+        })
       : [];
   return svg`
     <svg
       class="series-chart"
       viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}"
-      role="img"
+      role="group"
       aria-label=${label}
       preserveAspectRatio="xMidYMid meet"
     >

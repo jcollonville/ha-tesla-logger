@@ -4,6 +4,7 @@ import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { activityLabel, copy, language, type Copy, type Lang } from "./i18n";
 import {
   bucketLabel,
+  currentBucketIndex,
   SERIES_COUNT,
   seriesChart,
   seriesValues,
@@ -12,6 +13,7 @@ import {
 } from "./charts";
 import {
   asRecord,
+  bucketInPeriod,
   detailLine,
   displayChargerType,
   formatDuration,
@@ -72,6 +74,7 @@ export class TeslaLoggerCard extends LitElement {
     _detail: { state: true },
     _stats: { state: true },
     _series: { state: true },
+    _bucketIndex: { state: true },
     _period: { state: true },
     _page: { state: true },
     _loading: { state: true },
@@ -87,6 +90,7 @@ export class TeslaLoggerCard extends LitElement {
   private _stats?: Stats;
   private _series?: StatsSeries;
   private _seriesPeriod?: Period;
+  private _bucketIndex: number | null = null;
   private _period: Period = "month";
   private _page = 1;
   private _loading = false;
@@ -311,8 +315,18 @@ export class TeslaLoggerCard extends LitElement {
         stroke: var(--divider-color, rgba(127, 127, 127, 0.45));
         stroke-width: 1;
       }
+      .series-chart g[role="button"] {
+        cursor: pointer;
+      }
       .series-chart .bar {
         fill: var(--primary-color, #03a9f4);
+        opacity: 0.62;
+      }
+      .series-chart g.selected .bar,
+      .series-chart g[role="button"]:focus-visible .bar {
+        opacity: 1;
+        stroke: var(--primary-text-color, #212121);
+        stroke-width: 1.5;
       }
       .series-chart .hit {
         fill: transparent;
@@ -328,6 +342,43 @@ export class TeslaLoggerCard extends LitElement {
         fill: var(--primary-color, #03a9f4);
         stroke: var(--card-background-color, #fff);
         stroke-width: 1;
+        opacity: 0.75;
+      }
+      .series-chart g.selected .dot,
+      .series-chart g[role="button"]:focus-visible .dot {
+        opacity: 1;
+        stroke: var(--primary-text-color, #212121);
+        stroke-width: 2;
+      }
+      .totals {
+        margin: 0 12px 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: var(--secondary-background-color, rgba(127, 127, 127, 0.12));
+      }
+      .totals-label {
+        margin: 0 0 6px;
+        color: var(--primary-text-color, #212121);
+        font-size: 0.92rem;
+        font-weight: 700;
+      }
+      .totals-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .totals-row span {
+        display: block;
+        color: var(--secondary-text-color);
+        font-size: 0.75rem;
+      }
+      .totals-row strong {
+        display: block;
+        color: var(--primary-text-color, #212121);
+        font-size: 0.95rem;
+      }
+      .totals-sub {
+        margin-top: 2px;
       }
       .series-chart text {
         fill: var(--secondary-text-color, currentColor);
@@ -353,6 +404,12 @@ export class TeslaLoggerCard extends LitElement {
         }
         .entry {
           padding: 4px 8px;
+        }
+        .totals-row {
+          gap: 4px;
+        }
+        .totals-row strong {
+          font-size: 0.85rem;
         }
       }
     `,
@@ -711,6 +768,7 @@ export class TeslaLoggerCard extends LitElement {
   private charts() {
     const series = this._series;
     const buckets = series?.buckets ?? [];
+    const selected = this.selectedBucketIndex(buckets);
     return html`
       ${this.periodBar()}
       ${series && buckets.length === 0
@@ -719,18 +777,88 @@ export class TeslaLoggerCard extends LitElement {
       ${buckets.length
         ? html`
             <div class="series-list">
-              ${this.seriesFigure("line", this.text.consumptionChart, "Wh/km", (bucket) =>
-                finiteOrNull(bucket.wh_per_km),
+              ${this.seriesFigure(
+                "line",
+                this.text.consumptionChart,
+                "Wh/km",
+                (bucket) => finiteOrNull(bucket.wh_per_km),
+                selected,
               )}
-              ${this.seriesFigure("bar", this.text.distance, "km", (bucket) =>
-                finiteOrNull(bucket.distance_km),
+              ${this.seriesFigure(
+                "bar",
+                this.text.distance,
+                "km",
+                (bucket) => finiteOrNull(bucket.distance_km),
+                selected,
               )}
-              ${this.seriesFigure("bar", this.text.chargedChart, "kWh", (bucket) =>
-                finiteOrNull(bucket.energy_charged_kwh),
+              ${this.seriesFigure(
+                "bar",
+                this.text.chargedChart,
+                "kWh",
+                (bucket) => finiteOrNull(bucket.energy_charged_kwh),
+                selected,
               )}
             </div>
+            ${this.bucketTotals(buckets[selected])}
           `
         : nothing}
+    `;
+  }
+
+  private selectedBucketIndex(buckets: StatsBucket[]): number {
+    if (
+      this._bucketIndex != null &&
+      this._bucketIndex >= 0 &&
+      this._bucketIndex < buckets.length
+    ) {
+      return this._bucketIndex;
+    }
+    return currentBucketIndex(
+      buckets.map((bucket) => bucket.start),
+      this._period,
+    );
+  }
+
+  private selectBucket(index: number): void {
+    this._bucketIndex = index;
+  }
+
+  private bucketHeading(bucket: StatsBucket): string {
+    if (bucketInPeriod(bucket.start, this._period)) {
+      if (this._period === "week") {
+        return this.text.thisWeek;
+      }
+      if (this._period === "month") {
+        return this.text.thisMonth;
+      }
+      return this.text.thisYear;
+    }
+    return bucketLabel(bucket.start, this._period, this.cardLang);
+  }
+
+  private bucketTotals(bucket: StatsBucket) {
+    const consumed = finiteOrNull(bucket.energy_used_kwh);
+    return html`
+      <section class="totals" aria-live="polite">
+        <h3 class="totals-label">${this.bucketHeading(bucket)}</h3>
+        <div class="totals-row">
+          <div>
+            <span>${this.text.distance}</span>
+            <strong>${this.km(bucket.distance_km)}</strong>
+          </div>
+          <div>
+            <span>${this.text.duration}</span>
+            <strong>${formatDuration(bucket.drive_duration_s)}</strong>
+          </div>
+          <div>
+            <span>${this.text.chargedChart}</span>
+            <strong>${this.kwh(bucket.energy_charged_kwh)}</strong>
+            ${consumed == null
+              ? nothing
+              : html`<span class="totals-sub">${this.text.consumed} ${this.kwh(consumed)}</span>`}
+          </div>
+        </div>
+      </section>
     `;
   }
 
@@ -739,6 +867,7 @@ export class TeslaLoggerCard extends LitElement {
     title: string,
     unit: string,
     read: (bucket: StatsBucket) => number | null,
+    selected: number,
   ) {
     const buckets = this._series?.buckets ?? [];
     const digits = unit === "Wh/km" ? 0 : 1;
@@ -760,7 +889,10 @@ export class TeslaLoggerCard extends LitElement {
           <span class="series-title">${title}</span>
           <span class="series-value">${this.text.latest} ${latestText}</span>
         </figcaption>
-        ${seriesChart(points, kind, summary, formatTick)}
+        ${seriesChart(points, kind, summary, formatTick, {
+          selected,
+          onSelect: (index) => this.selectBucket(index),
+        })}
       </figure>
     `;
   }
@@ -885,6 +1017,7 @@ export class TeslaLoggerCard extends LitElement {
 
   private setPeriod(period: Period): void {
     this._period = period;
+    this._bucketIndex = null;
     if (this._view === "charts") {
       void this.loadSeries();
       return;
@@ -916,6 +1049,7 @@ export class TeslaLoggerCard extends LitElement {
     this._stats = undefined;
     this._series = undefined;
     this._seriesPeriod = undefined;
+    this._bucketIndex = null;
     this._page = 1;
     this._error = "";
   }

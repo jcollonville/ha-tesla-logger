@@ -1,7 +1,7 @@
 import { render } from "lit";
 import { describe, expect, it } from "vitest";
 
-import { bucketLabel, niceMax, seriesChart, type ChartPoint } from "./charts";
+import { bucketLabel, currentBucketIndex, niceMax, seriesChart, type ChartPoint } from "./charts";
 
 function mount(points: ChartPoint[], kind: "bar" | "line") {
   const host = document.createElement("div");
@@ -18,6 +18,18 @@ describe("niceMax", () => {
     expect(niceMax(180)).toBe(200);
     expect(niceMax(20)).toBe(20);
     expect(niceMax(100)).toBe(100);
+  });
+});
+
+describe("currentBucketIndex", () => {
+  it("prefers the bucket that falls in the current month", () => {
+    const now = new Date(2026, 10, 10, 12);
+    const starts = [
+      new Date(2026, 9, 1).toISOString(),
+      new Date(2026, 10, 1).toISOString(),
+    ];
+    expect(currentBucketIndex(starts, "month", now)).toBe(1);
+    expect(currentBucketIndex([starts[0]], "month", now)).toBe(0);
   });
 });
 
