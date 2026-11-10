@@ -30,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 _SERIES = {
     vol.Required("device_id"): cv.string,
     vol.Required("period"): vol.In(("week", "month", "year")),
-    vol.Optional("count", default=12): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+    vol.Optional("count", default=12): vol.All(vol.Coerce(int), vol.Range(min=1, max=120)),
 }
 
 _HISTORY = {

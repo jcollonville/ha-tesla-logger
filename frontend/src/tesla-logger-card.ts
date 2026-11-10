@@ -1063,7 +1063,8 @@ export class TeslaLoggerCard extends LitElement {
   private tempFigure() {
     const bins = this._tempBins ?? [];
     const points: ChartPoint[] = bins.map((bin) => {
-      const label = `${formatNumber(bin.temp_c_bucket, 0, this.cardLang)}°`;
+      const lower = bin.temp_c_bucket;
+      const label = `${formatNumber(lower, 0, this.cardLang)}–${formatNumber(lower + 5, 0, this.cardLang)}°`;
       const wh = finiteOrNull(bin.wh_per_km);
       const distance = finiteOrNull(bin.distance_km);
       const whText = wh == null ? "—" : `${formatNumber(wh, 0, this.cardLang)} Wh/km`;

@@ -7,7 +7,7 @@ import type { Period } from "./types";
 export const SERIES_COUNT: Record<Period, number> = {
   week: 12,
   month: 12,
-  year: 6,
+  year: 5,
 };
 
 const CHART_WIDTH = 360;

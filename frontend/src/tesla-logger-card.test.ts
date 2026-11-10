@@ -310,7 +310,7 @@ describe("charts view", () => {
     expect(root?.querySelector(".series-extra")?.textContent).toContain("2,00");
     expect(root?.querySelector(".series-extra")?.textContent).toContain("0,05 /km");
     expect(root?.querySelectorAll(".series-extra rect.bar.dc").length).toBeGreaterThan(0);
-    expect(root?.querySelector(".series-extra")?.textContent).toContain("10°");
+    expect(root?.querySelector(".series-extra")?.textContent).toContain("10–15°");
 
     const totals = () => root?.querySelector(".totals");
     expect(totals()?.querySelector(".totals-label")?.textContent).toBe("Ce mois");
@@ -448,7 +448,7 @@ describe("show configuration", () => {
     });
     await card.updateComplete;
     await vi.waitFor(() => {
-      expect(card.shadowRoot?.textContent).toContain("10°");
+      expect(card.shadowRoot?.textContent).toContain("10–15°");
     });
     const services = callService.mock.calls.map((call) => call[1]);
     expect(services).toContain("get_consumption_by_temp");

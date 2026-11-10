@@ -142,7 +142,7 @@
       "fields": {
         "device_id": { "name": "Vehicle", "description": "Tesla Logger vehicle." },
         "period": { "name": "Period", "description": "Bucket size: week, month, or year." },
-        "count": { "name": "Count", "description": "Number of buckets, from 1 to 60, oldest first." }
+        "count": { "name": "Count", "description": "Number of buckets, from 1 to 120, oldest first." }
       }
     },
     "get_consumption_by_temp": {
@@ -151,7 +151,7 @@
       "fields": {
         "device_id": { "name": "Vehicle", "description": "Tesla Logger vehicle." },
         "period": { "name": "Period", "description": "Bucket size: week, month, or year." },
-        "count": { "name": "Count", "description": "Number of periods in the window, from 1 to 60." }
+        "count": { "name": "Count", "description": "Number of periods in the window, from 1 to 120." }
       }
     }
   }
