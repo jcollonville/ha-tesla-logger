@@ -7,6 +7,59 @@ export function formatNumber(value: number, digits: number, lang: Lang): string 
   });
 }
 
+const PLACEHOLDER_VALUE = /^<.*>$/;
+
+/** Charger label safe to show. Tesla sends placeholders such as "<invalid>". */
+export function displayChargerType(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || PLACEHOLDER_VALUE.test(trimmed)) {
+    return null;
+  }
+  const lower = trimmed.toLowerCase();
+  if (lower === "none" || lower === "null") {
+    return null;
+  }
+  return trimmed;
+}
+
+/** One muted detail line. Empty pieces are left out. */
+export function detailLine(parts: Array<string | null | undefined>): string {
+  return parts
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter((part) => part.length > 0)
+    .join(" · ");
+}
+
+/** Compact list timestamp, e.g. "mar. 10 nov. 03:30" or "Tue Nov 10 03:30 AM". */
+export function formatListTimestamp(value: string, lang: Lang): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const locale = lang === "fr" ? "fr-FR" : "en-US";
+  const day = new Intl.DateTimeFormat(locale, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  })
+    .format(date)
+    .replace(/[\u00a0\u202f]/g, " ")
+    .replace(/,/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+    .format(date)
+    .replace(/[\u00a0\u202f]/g, " ")
+    .trim();
+  return `${day} ${time}`;
+}
+
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null || Number.isNaN(seconds)) {
     return "—";

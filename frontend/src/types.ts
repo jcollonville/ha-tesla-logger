@@ -46,6 +46,8 @@ export interface Drive {
   distance_km?: number | null;
   duration_s?: number | null;
   energy_used_kwh?: number | null;
+  start_address?: string | null;
+  end_address?: string | null;
 }
 
 export interface RoutePoint {

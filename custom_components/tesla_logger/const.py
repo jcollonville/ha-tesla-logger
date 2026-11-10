@@ -9,7 +9,7 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "tesla_logger"
 CARD_PATH: Final = "/tesla_logger/tesla-logger-card.js"
-CARD_VERSION: Final = "0.1.4"
+CARD_VERSION: Final = "0.1.5"
 
 CONF_URL: Final = "url"
 CONF_TOKEN: Final = "token"

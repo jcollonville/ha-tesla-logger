@@ -5,7 +5,10 @@ import { activityLabel, copy, language, type Copy, type Lang } from "./i18n";
 import { sparkline, seriesValues } from "./charts";
 import {
   asRecord,
+  detailLine,
+  displayChargerType,
   formatDuration,
+  formatListTimestamp,
   formatNumber,
   periodRange,
   safeError,
@@ -158,7 +161,7 @@ export class TeslaLoggerCard extends LitElement {
         gap: 8px;
         padding: 0 12px 8px;
       }
-      .metric, .item {
+      .metric {
         background: var(--secondary-background-color, rgba(0, 0, 0, 0.04));
         border-radius: 12px;
         padding: 10px 12px;
@@ -168,24 +171,67 @@ export class TeslaLoggerCard extends LitElement {
         color: var(--secondary-text-color);
         font-size: 0.78rem;
       }
-      .metric strong, .item strong {
+      .metric strong {
         color: var(--primary-text-color);
         font-size: 1rem;
       }
       .list {
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        padding: 0 12px 8px;
+        gap: 4px;
+        margin: 0;
+        padding: 0 12px 4px;
+        list-style: none;
       }
-      .item {
-        text-align: left;
-        width: 100%;
-      }
-      .row {
+      .entry {
         display: flex;
-        justify-content: space-between;
-        gap: 8px;
+        flex-direction: column;
+        gap: 1px;
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        margin: 0;
+        padding: 5px 8px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--secondary-background-color, rgba(127, 127, 127, 0.16));
+        color: var(--primary-text-color, #212121);
+        text-align: left;
+      }
+      button.entry {
+        font: inherit;
+        min-height: 0;
+        border-bottom: 0;
+        cursor: pointer;
+      }
+      button.entry:hover {
+        background: color-mix(
+          in srgb,
+          var(--primary-text-color, #212121) 8%,
+          var(--secondary-background-color, transparent)
+        );
+      }
+      button.entry:focus-visible {
+        outline: 2px solid var(--primary-color, #03a9f4);
+        outline-offset: 2px;
+      }
+      .entry-when {
+        color: var(--primary-text-color, #212121);
+        font-size: 0.92rem;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+      .entry-meta {
+        display: block;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        color: var(--secondary-text-color);
+        font-size: 0.8rem;
+        line-height: 1.3;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .map {
         height: 220px;
@@ -219,6 +265,13 @@ export class TeslaLoggerCard extends LitElement {
       @media (max-width: 420px) {
         .header {
           grid-template-columns: 64px 1fr;
+        }
+        .list {
+          gap: 3px;
+          padding: 0 8px 4px;
+        }
+        .entry {
+          padding: 4px 8px;
         }
       }
     `,
@@ -465,21 +518,13 @@ export class TeslaLoggerCard extends LitElement {
         <span>${this.text.page} ${page?.page ?? this._page}</span>
         <button @click=${() => this.reload()}>${this.text.refresh}</button>
       </div>
-      <div class="list">
-        ${(page?.data || []).map(
-          (drive) => html`
-            <button class="item" @click=${() => this.openDrive(drive.id)}>
-              <div class="row">
-                <strong>${this.when(drive.start_at)}</strong>
-                <span>${this.km(drive.distance_km)}</span>
-              </div>
-              <span class="muted">
-                ${formatDuration(drive.duration_s)} · ${this.consumption(drive)}
-              </span>
-            </button>
-          `,
+      <ul class="list">
+        ${(page?.data || []).map((drive) =>
+          this.historyEntry(drive.start_at, this.driveDetails(drive), () =>
+            this.openDrive(drive.id),
+          ),
         )}
-      </div>
+      </ul>
       ${page && page.data.length === 0 ? html`<p class="message">${this.text.emptyDrives}</p>` : nothing}
       ${this.pager(page)}
     `;
@@ -523,25 +568,11 @@ export class TeslaLoggerCard extends LitElement {
         <span>${this.text.page} ${page?.page ?? this._page}</span>
         <button @click=${() => this.reload()}>${this.text.refresh}</button>
       </div>
-      <div class="list">
-        ${(page?.data || []).map(
-          (charge) => html`
-            <div class="item">
-              <div class="row">
-                <strong>${this.when(charge.start_at)}</strong>
-                <span>${this.kwh(charge.energy_added_kwh)}</span>
-              </div>
-              <span class="muted">
-                ${formatDuration(charge.duration_s)}
-                ${charge.max_power_kw != null
-                  ? `· ${formatNumber(charge.max_power_kw, 0, this.cardLang)} kW`
-                  : ""}
-                ${charge.charger_type ? `· ${charge.charger_type}` : ""}
-              </span>
-            </div>
-          `,
+      <ul class="list">
+        ${(page?.data || []).map((charge) =>
+          this.historyEntry(charge.start_at, this.chargeDetails(charge)),
         )}
-      </div>
+      </ul>
       ${page && page.data.length === 0
         ? html`<p class="message">${this.text.emptyCharges}</p>`
         : nothing}
@@ -620,20 +651,67 @@ export class TeslaLoggerCard extends LitElement {
     `;
   }
 
+  private historyEntry(
+    startAt: string,
+    details: Array<string | null | undefined>,
+    onOpen?: () => void,
+  ) {
+    const meta = detailLine(details);
+    const body = html`
+      <strong class="entry-when">
+        <time datetime=${startAt}>${formatListTimestamp(startAt, this.cardLang)}</time>
+      </strong>
+      ${meta ? html`<span class="entry-meta" title=${meta}>${meta}</span>` : nothing}
+    `;
+    if (onOpen) {
+      return html`
+        <li>
+          <button type="button" class="entry" @click=${onOpen}>${body}</button>
+        </li>
+      `;
+    }
+    return html`<li><div class="entry">${body}</div></li>`;
+  }
+
+  private driveDetails(drive: Drive): Array<string | null> {
+    const efficiency = whPerKm(drive.energy_used_kwh, drive.distance_km);
+    const start = this.place(drive.start_address);
+    const end = this.place(drive.end_address);
+    const route = start && end ? `${start} → ${end}` : start || end;
+    return [
+      drive.duration_s == null ? null : formatDuration(drive.duration_s),
+      drive.distance_km == null ? null : this.km(drive.distance_km),
+      efficiency == null ? null : `${formatNumber(efficiency, 0, this.cardLang)} Wh/km`,
+      drive.energy_used_kwh == null ? null : this.kwh(drive.energy_used_kwh),
+      route,
+    ];
+  }
+
+  private chargeDetails(charge: Charge): Array<string | null> {
+    return [
+      charge.duration_s == null ? null : formatDuration(charge.duration_s),
+      charge.energy_added_kwh == null ? null : this.kwh(charge.energy_added_kwh),
+      charge.max_power_kw == null
+        ? null
+        : `${formatNumber(charge.max_power_kw, 0, this.cardLang)} kW`,
+      displayChargerType(charge.charger_type),
+    ];
+  }
+
+  private place(value: string | null | undefined): string | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
   private km(value: number | null | undefined): string {
     return value == null ? "—" : `${formatNumber(value, 1, this.cardLang)} km`;
   }
 
   private kwh(value: number | null | undefined): string {
     return value == null ? "—" : `${formatNumber(value, 1, this.cardLang)} kWh`;
-  }
-
-  private consumption(drive: Drive): string {
-    const value = whPerKm(drive.energy_used_kwh, drive.distance_km);
-    if (value == null) {
-      return this.kwh(drive.energy_used_kwh);
-    }
-    return `${formatNumber(value, 0, this.cardLang)} Wh/km`;
   }
 
   private when(value: string): string {

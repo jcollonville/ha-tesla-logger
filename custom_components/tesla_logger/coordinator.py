@@ -98,8 +98,10 @@ class TeslaLoggerCoordinator(DataUpdateCoordinator[VehicleData]):
         current = self.data
         state = dict(current.state) if current else {}
         for key, value in frame.items():
-            if key not in _WS_SKIP:
-                state[key] = value
+            # Nulls in an Owner-stream frame are omitted fields, not resets.
+            if key in _WS_SKIP or value is None:
+                continue
+            state[key] = value
         if frame.get("at") is not None:
             state["last_data_at"] = frame["at"]
         name = frame.get("name")
