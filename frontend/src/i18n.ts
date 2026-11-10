@@ -68,6 +68,20 @@ const EN = {
   updating: "Updating",
   entity: "Entity",
   defaultView: "Default view",
+  showBlocks: "Blocks",
+  showFields: {
+    status: "Status",
+    drives: "Drives",
+    charges: "Charges",
+    chart_consumption: "Consumption (Wh/km)",
+    chart_distance: "Distance",
+    chart_energy: "Energy charged",
+    totals: "Totals",
+    battery_health: "Battery health",
+    charging_split: "AC/DC charging and cost",
+    vampire_drain: "Parked consumption",
+    consumption_vs_temp: "Consumption vs temperature",
+  },
 };
 
 const FR: typeof EN = {
@@ -139,6 +153,20 @@ const FR: typeof EN = {
   updating: "Mise à jour",
   entity: "Entité",
   defaultView: "Vue par défaut",
+  showBlocks: "Blocs",
+  showFields: {
+    status: "État",
+    drives: "Trajets",
+    charges: "Charges",
+    chart_consumption: "Consommation (Wh/km)",
+    chart_distance: "Distance",
+    chart_energy: "Énergie chargée",
+    totals: "Totaux",
+    battery_health: "Santé batterie",
+    charging_split: "Charges AC/DC et coût",
+    vampire_drain: "Consommation à l'arrêt",
+    consumption_vs_temp: "Consommation vs température",
+  },
 };
 
 export type Copy = typeof EN;

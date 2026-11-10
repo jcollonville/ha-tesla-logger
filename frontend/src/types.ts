@@ -34,6 +34,7 @@ export interface CardConfig {
   type?: string;
   entity: string;
   default_view?: ViewName;
+  show?: Partial<Record<string, boolean>>;
 }
 
 export type ViewName = "status" | "drives" | "drive" | "charges" | "stats" | "charts";

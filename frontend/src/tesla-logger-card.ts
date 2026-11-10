@@ -23,6 +23,15 @@ import {
   safeError,
   whPerKm,
 } from "./format";
+import {
+  SHOW_DEFAULTS,
+  SHOW_KEYS,
+  chartsVisible,
+  fallbackView,
+  seriesNeeded,
+  showFlags,
+  visibleViews,
+} from "./show-config";
 import type {
   CardConfig,
   Charge,
@@ -489,6 +498,18 @@ export class TeslaLoggerCard extends LitElement {
       this._view = config.default_view || "status";
       this.clearHistory();
     }
+    this.ensureVisibleView();
+  }
+
+  private get flags() {
+    return showFlags(this._config);
+  }
+
+  private ensureVisibleView(): void {
+    const next = fallbackView(this._view, this.flags);
+    if (next !== this._view) {
+      this._view = next;
+    }
   }
 
   static getConfigElement(): HTMLElement {
@@ -499,7 +520,7 @@ export class TeslaLoggerCard extends LitElement {
     const entity =
       Object.keys(hass.states).find((id) => hass.states[id]?.attributes?.key === "location") ||
       "";
-    return { entity };
+    return { entity, show: { ...SHOW_DEFAULTS } };
   }
 
   getCardSize(): number {
@@ -531,11 +552,7 @@ export class TeslaLoggerCard extends LitElement {
       <ha-card>
         ${this.header()}
         <div class="tabs" role="tablist">
-          ${this.tab("status", this.text.status)}
-          ${this.tab("drives", this.text.drives)}
-          ${this.tab("charges", this.text.charges)}
-          ${this.tab("stats", this.text.stats)}
-          ${this.tab("charts", this.text.charts)}
+          ${visibleViews(this.flags).map((view) => this.tab(view, this.text[view]))}
         </div>
         ${this._error ? html`<p class="message">${this._error}</p>` : nothing}
         ${this._loading ? html`<p class="message">${this.text.loading}</p>` : nothing}
@@ -830,59 +847,80 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   private charts() {
+    const show = this.flags;
     const series = this._series;
     const buckets = series?.buckets ?? [];
-    const selected = this.selectedBucketIndex(buckets);
+    const selected = buckets.length ? this.selectedBucketIndex(buckets) : -1;
+    const main = show.chart_consumption || show.chart_distance || show.chart_energy;
+    const extra =
+      show.battery_health ||
+      show.charging_split ||
+      show.vampire_drain ||
+      show.consumption_vs_temp;
     return html`
       ${this.periodBar()}
-      ${series && buckets.length === 0
+      ${main && series && buckets.length === 0
         ? html`<p class="message">${this.text.emptySeries}</p>`
         : nothing}
-      ${buckets.length
+      ${main && buckets.length
         ? html`
             <div class="series-list">
-              ${this.seriesFigure(
-                "line",
-                this.text.consumptionChart,
-                "Wh/km",
-                (bucket) => finiteOrNull(bucket.wh_per_km),
-                selected,
-              )}
-              ${this.seriesFigure(
-                "bar",
-                this.text.distance,
-                "km",
-                (bucket) => finiteOrNull(bucket.distance_km),
-                selected,
-              )}
-              ${this.seriesFigure(
-                "bar",
-                this.text.chargedChart,
-                "kWh",
-                (bucket) => finiteOrNull(bucket.energy_charged_kwh),
-                selected,
-              )}
+              ${show.chart_consumption
+                ? this.seriesFigure(
+                    "line",
+                    this.text.consumptionChart,
+                    "Wh/km",
+                    (bucket) => finiteOrNull(bucket.wh_per_km),
+                    selected,
+                  )
+                : nothing}
+              ${show.chart_distance
+                ? this.seriesFigure(
+                    "bar",
+                    this.text.distance,
+                    "km",
+                    (bucket) => finiteOrNull(bucket.distance_km),
+                    selected,
+                  )
+                : nothing}
+              ${show.chart_energy
+                ? this.seriesFigure(
+                    "bar",
+                    this.text.chargedChart,
+                    "kWh",
+                    (bucket) => finiteOrNull(bucket.energy_charged_kwh),
+                    selected,
+                  )
+                : nothing}
             </div>
-            ${this.bucketTotals(buckets[selected])}
+          `
+        : nothing}
+      ${show.totals && selected >= 0 ? this.bucketTotals(buckets[selected]) : nothing}
+      ${extra
+        ? html`
             <div class="series-extra">
-              ${this.seriesFigure(
-                "line",
-                this.text.batteryHealth,
-                "km",
-                (bucket) => finiteOrNull(bucket.range_at_100_km),
-                selected,
-                true,
-              )}
-              ${this.acDcFigure(buckets, selected)}
-              ${this.seriesFigure(
-                "bar",
-                this.text.idleUse,
-                "km/j",
-                (bucket) => finiteOrNull(bucket.idle_range_loss_km_per_day),
-                selected,
-                true,
-              )}
-              ${this.tempFigure()}
+              ${show.battery_health && selected >= 0
+                ? this.seriesFigure(
+                    "line",
+                    this.text.batteryHealth,
+                    "km",
+                    (bucket) => finiteOrNull(bucket.range_at_100_km),
+                    selected,
+                    true,
+                  )
+                : nothing}
+              ${show.charging_split && selected >= 0 ? this.acDcFigure(buckets, selected) : nothing}
+              ${show.vampire_drain && selected >= 0
+                ? this.seriesFigure(
+                    "bar",
+                    this.text.idleUse,
+                    "km/j",
+                    (bucket) => finiteOrNull(bucket.idle_range_loss_km_per_day),
+                    selected,
+                    true,
+                  )
+                : nothing}
+              ${show.consumption_vs_temp ? this.tempFigure() : nothing}
             </div>
           `
         : nothing}
@@ -1221,15 +1259,15 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   private async ensureView(): Promise<void> {
-    if (this._view === "drives" && !this._drives) {
+    if (this._view === "drives" && this.flags.drives && !this._drives) {
       await this.loadDrives();
-    } else if (this._view === "charges" && !this._charges) {
+    } else if (this._view === "charges" && this.flags.charges && !this._charges) {
       await this.loadCharges();
     } else if (this._view === "stats" && !this._stats) {
       await this.loadStats();
-    } else if (this._view === "charts" && this._seriesPeriod !== this._period) {
+    } else if (this._view === "charts" && chartsVisible(this.flags) && this.seriesStale()) {
       await this.loadSeries();
-    } else if (this._view === "drive" && this._driveId != null && !this._detail) {
+    } else if (this._view === "drive" && this.flags.drives && this._driveId != null && !this._detail) {
       await this.loadDrive();
     }
   }
@@ -1268,24 +1306,50 @@ export class TeslaLoggerCard extends LitElement {
     });
   }
 
+  private seriesStale(): boolean {
+    const show = this.flags;
+    if (this._seriesPeriod !== this._period) {
+      return true;
+    }
+    if (seriesNeeded(show) && !this._series) {
+      return true;
+    }
+    if (show.consumption_vs_temp && !this._tempBins) {
+      return true;
+    }
+    return false;
+  }
+
   private async loadSeries(): Promise<void> {
+    const show = this.flags;
+    if (!chartsVisible(show)) {
+      return;
+    }
     const period = this._period;
-    this._series = undefined;
-    this._tempBins = undefined;
+    const wantSeries = seriesNeeded(show);
+    const wantTemp = show.consumption_vs_temp;
+    if (wantSeries) {
+      this._series = undefined;
+    }
+    if (wantTemp) {
+      this._tempBins = undefined;
+    }
     await this.load("charts", async () => {
       const count = SERIES_COUNT[period];
-      const payload = await this.call("get_stats_series", { period, count });
-      if (!isSeries(payload)) {
-        throw new Error(this.text.failed);
+      if (wantSeries) {
+        const payload = await this.call("get_stats_series", { period, count });
+        if (!isSeries(payload)) {
+          throw new Error(this.text.failed);
+        }
+        this._series = payload;
       }
-      let bins: TempBin[] = [];
-      try {
-        bins = tempBins(await this.call("get_consumption_by_temp", { period, count }));
-      } catch {
-        bins = [];
+      if (wantTemp) {
+        try {
+          this._tempBins = tempBins(await this.call("get_consumption_by_temp", { period, count }));
+        } catch {
+          this._tempBins = [];
+        }
       }
-      this._series = payload;
-      this._tempBins = bins;
       this._seriesPeriod = period;
     });
   }
@@ -1400,6 +1464,23 @@ export class TeslaLoggerCard extends LitElement {
   }
 }
 
+function fieldLabel(name: string, text: Copy): string {
+  const key = name.split(".").pop() ?? name;
+  if (key === "entity") {
+    return text.entity;
+  }
+  if (key === "default_view") {
+    return text.defaultView;
+  }
+  if (key === "show") {
+    return text.showBlocks;
+  }
+  if (key in text.showFields) {
+    return text.showFields[key as keyof typeof text.showFields];
+  }
+  return name;
+}
+
 const SCHEMA = [
   {
     name: "entity",
@@ -1420,6 +1501,12 @@ const SCHEMA = [
       },
     },
   },
+  {
+    name: "show",
+    type: "grid",
+    column_min_width: "200px",
+    schema: SHOW_KEYS.map((name) => ({ name, selector: { boolean: {} } })),
+  },
 ];
 
 class TeslaLoggerCardEditor extends LitElement {
@@ -1432,7 +1519,7 @@ class TeslaLoggerCardEditor extends LitElement {
   private _config?: CardConfig;
 
   setConfig(config: CardConfig): void {
-    this._config = config;
+    this._config = { ...config, show: showFlags(config) };
   }
 
   override render() {
@@ -1445,10 +1532,10 @@ class TeslaLoggerCardEditor extends LitElement {
         .hass=${this.hass}
         .data=${this._config}
         .schema=${SCHEMA}
-        .computeLabel=${(schema: { name: string }) =>
-          schema.name === "entity" ? text.entity : text.defaultView}
+        .computeLabel=${(schema: { name: string }) => fieldLabel(schema.name, text)}
         @value-changed=${(event: CustomEvent<{ value: CardConfig }>) => {
-          this._config = { ...this._config, ...event.detail.value };
+          const next = { ...this._config, ...event.detail.value };
+          this._config = { ...next, show: showFlags(next) };
           this.dispatchEvent(
             new CustomEvent("config-changed", {
               detail: { config: this._config },

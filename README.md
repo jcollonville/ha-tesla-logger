@@ -85,7 +85,27 @@ response_variable: tesla_stats
 
 No dashboard resource is required. The integration serves `tesla-logger-card.js` and registers it with `add_extra_js_url`.
 
-Add a **Tesla Logger** card and pick any entity from the vehicle. The card has five views:
+Add a **Tesla Logger** card and pick any entity from the vehicle. Every block is shown unless `show` says otherwise. A tab disappears when all of its blocks are hidden, and hidden blocks are not requested from the server.
+
+```yaml
+type: custom:tesla-logger-card
+entity: sensor.red_location
+show:
+  drives: true
+  charges: true
+  chart_consumption: true
+  chart_distance: true
+  chart_energy: true
+  totals: true
+  battery_health: true
+  charging_split: true
+  vampire_drain: true
+  consumption_vs_temp: true
+```
+
+`status` can be set the same way. Omitted keys stay visible. The visual editor exposes the same toggles.
+
+The card has five views:
 
 - Status: battery, range, activity, location, and the main readings
 - Drives: distance, duration, and consumption, with a detail view

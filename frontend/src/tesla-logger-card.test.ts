@@ -392,3 +392,68 @@ describe("charts view", () => {
     expect(args[5]).toBe(true);
   });
 });
+
+describe("show configuration", () => {
+  it("hides the drives tab and skips the drives request", async () => {
+    const callService = vi.fn().mockResolvedValue({
+      response: { data: [], page: 1, per_page: 20, total: 0 },
+    });
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    const hass = frenchHass();
+    hass.callService = callService;
+    card.hass = hass;
+    card.setConfig({
+      entity: "sensor.tesla_location",
+      default_view: "drives",
+      show: { drives: false },
+    });
+    await card.updateComplete;
+    const tabs = Array.from(card.shadowRoot?.querySelectorAll("[role='tab']") ?? []).map((tab) =>
+      tab.textContent?.trim(),
+    );
+    expect(tabs).not.toContain("Trajets");
+    expect(tabs).toContain("État");
+    expect(tabs).toContain("Charges");
+    expect(callService.mock.calls.map((call) => call[1])).not.toContain("get_drives");
+  });
+
+  it("requests only temperature bins when the other chart blocks are hidden", async () => {
+    const callService = vi.fn().mockImplementation(async (_domain: string, service: string) => {
+      if (service === "get_consumption_by_temp") {
+        return { response: { data: [{ temp_c_bucket: 10, wh_per_km: 150, distance_km: 5 }] } };
+      }
+      return { response: { period: "month", buckets: [] } };
+    });
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    const hass = frenchHass();
+    hass.callService = callService;
+    card.hass = hass;
+    card.setConfig({
+      entity: "sensor.tesla_location",
+      default_view: "charts",
+      show: {
+        chart_consumption: false,
+        chart_distance: false,
+        chart_energy: false,
+        totals: false,
+        battery_health: false,
+        charging_split: false,
+        vampire_drain: false,
+        consumption_vs_temp: true,
+      },
+    });
+    await card.updateComplete;
+    await vi.waitFor(() => {
+      expect(card.shadowRoot?.textContent).toContain("10°");
+    });
+    const services = callService.mock.calls.map((call) => call[1]);
+    expect(services).toContain("get_consumption_by_temp");
+    expect(services).not.toContain("get_stats_series");
+    expect(card.shadowRoot?.querySelector(".series-list")).toBeNull();
+    expect(card.shadowRoot?.textContent).toContain("Consommation vs température");
+  });
+});
