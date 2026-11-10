@@ -123,6 +123,8 @@ The map loads tiles in the browser from OpenStreetMap. The server token is not p
 
 ## Development
 
+Local Home Assistant, the edit loop, tests, and releases: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (français).
+
 ```bash
 pip install -r requirements_test.txt
 ruff check .
