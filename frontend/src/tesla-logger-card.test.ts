@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { safeError } from "./format";
 import { TeslaLoggerCard } from "./tesla-logger-card";
-import type { Charge, Drive, HomeAssistant, Page } from "./types";
+import type { Charge, Drive, HomeAssistant, Page, StatsSeries } from "./types";
 
 const HISTORY_ERROR = {
   code: "home_assistant_error",
@@ -206,5 +206,86 @@ describe("history lists", () => {
     rows[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await card.updateComplete;
     expect((card as unknown as { _view: string })._view).toBe("drive");
+  });
+});
+
+describe("charts view", () => {
+  it("draws consumption, distance, and energy charged on one French view", async () => {
+    const october = new Date(2026, 9, 15).toISOString();
+    const november = new Date(2026, 10, 15).toISOString();
+    const series: StatsSeries = {
+      period: "month",
+      buckets: [
+        {
+          start: october,
+          distance_km: 100,
+          energy_used_kwh: 18,
+          wh_per_km: 180,
+          energy_charged_kwh: 20,
+        },
+        {
+          start: november,
+          distance_km: 40.5,
+          energy_used_kwh: null,
+          wh_per_km: null,
+          energy_charged_kwh: 0,
+        },
+      ],
+    };
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    card.hass = frenchHass();
+    card.setConfig({ entity: "sensor.tesla_location", default_view: "charts" });
+    const state = card as unknown as { _series?: StatsSeries; _seriesPeriod?: string };
+    state._series = series;
+    state._seriesPeriod = "month";
+    await card.updateComplete;
+
+    const root = card.shadowRoot;
+    expect(root?.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim()).toBe(
+      "Graphiques",
+    );
+    const pressed = Array.from(root?.querySelectorAll("button[aria-pressed='true']") ?? []).map(
+      (button) => button.textContent?.trim(),
+    );
+    expect(pressed).toContain("Mois");
+    const titles = Array.from(root?.querySelectorAll(".series-title") ?? []).map(
+      (node) => node.textContent,
+    );
+    expect(titles).toEqual(["Consommation", "Distance", "Énergie chargée"]);
+    const tips = Array.from(root?.querySelectorAll("title") ?? []).map((node) => node.textContent);
+    const consumptionTips = tips.filter((tip) => tip?.includes("Wh/km"));
+    expect(consumptionTips).toHaveLength(1);
+    expect(consumptionTips[0]).toContain("180 Wh/km");
+    expect(tips.some((tip) => tip?.includes("40,5 km"))).toBe(true);
+    expect(tips.some((tip) => tip?.includes("0,0 kWh"))).toBe(true);
+    const values = Array.from(root?.querySelectorAll(".series-value") ?? []).map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(values).toEqual(["Dernier —", "Dernier 40,5 km", "Dernier 0,0 kWh"]);
+    expect(root?.querySelectorAll("rect.bar")).toHaveLength(4);
+    expect(root?.querySelectorAll("circle.dot")).toHaveLength(1);
+    expect(root?.querySelector(".series-chart")?.getAttribute("role")).toBe("img");
+  });
+
+  it("requests get_stats_series for the selected period", async () => {
+    const callService = vi.fn().mockResolvedValue({
+      response: { period: "month", buckets: [] },
+    });
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    const hass = frenchHass();
+    hass.callService = callService;
+    card.hass = hass;
+    card.setConfig({ entity: "sensor.tesla_location", default_view: "charts" });
+    await card.updateComplete;
+    await vi.waitFor(() => expect(callService).toHaveBeenCalled());
+    const args = callService.mock.calls[0];
+    expect(args[0]).toBe("tesla_logger");
+    expect(args[1]).toBe("get_stats_series");
+    expect(args[2]).toEqual({ device_id: "device-1", period: "month", count: 12 });
+    expect(args[5]).toBe(true);
   });
 });

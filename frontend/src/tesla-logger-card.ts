@@ -2,7 +2,14 @@ import * as L from "leaflet";
 import leafletCss from "leaflet/dist/leaflet.css?inline";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { activityLabel, copy, language, type Copy, type Lang } from "./i18n";
-import { sparkline, seriesValues } from "./charts";
+import {
+  bucketLabel,
+  SERIES_COUNT,
+  seriesChart,
+  seriesValues,
+  sparkline,
+  type ChartPoint,
+} from "./charts";
 import {
   asRecord,
   detailLine,
@@ -24,6 +31,8 @@ import type {
   Page,
   Period,
   Stats,
+  StatsBucket,
+  StatsSeries,
   ViewName,
 } from "./types";
 
@@ -44,6 +53,15 @@ function isStats(value: unknown): value is Stats {
   return Boolean(record && typeof record.distance_km === "number");
 }
 
+function isSeries(value: unknown): value is StatsSeries {
+  const record = asRecord(value);
+  return Boolean(record && Array.isArray(record.buckets));
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export class TeslaLoggerCard extends LitElement {
   static properties = {
     hass: { attribute: false },
@@ -53,6 +71,7 @@ export class TeslaLoggerCard extends LitElement {
     _charges: { state: true },
     _detail: { state: true },
     _stats: { state: true },
+    _series: { state: true },
     _period: { state: true },
     _page: { state: true },
     _loading: { state: true },
@@ -66,6 +85,8 @@ export class TeslaLoggerCard extends LitElement {
   private _charges?: Page<Charge>;
   private _detail?: DriveDetail;
   private _stats?: Stats;
+  private _series?: StatsSeries;
+  private _seriesPeriod?: Period;
   private _period: Period = "month";
   private _page = 1;
   private _loading = false;
@@ -253,6 +274,66 @@ export class TeslaLoggerCard extends LitElement {
         stroke: var(--primary-color, #03a9f4);
         stroke-width: 2;
       }
+      .series-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 0 12px 8px;
+      }
+      .series-card {
+        margin: 0;
+        padding: 8px 8px 2px;
+        border-radius: 12px;
+        background: var(--secondary-background-color, rgba(127, 127, 127, 0.12));
+      }
+      .series-card figcaption {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+        padding: 0 4px 2px;
+      }
+      .series-title {
+        color: var(--primary-text-color, #212121);
+        font-size: 0.92rem;
+        font-weight: 700;
+      }
+      .series-value {
+        color: var(--secondary-text-color);
+        font-size: 0.8rem;
+      }
+      .series-chart {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .series-chart .grid {
+        stroke: var(--divider-color, rgba(127, 127, 127, 0.45));
+        stroke-width: 1;
+      }
+      .series-chart .bar {
+        fill: var(--primary-color, #03a9f4);
+      }
+      .series-chart .hit {
+        fill: transparent;
+      }
+      .series-chart .line {
+        fill: none;
+        stroke: var(--primary-color, #03a9f4);
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .series-chart .dot {
+        fill: var(--primary-color, #03a9f4);
+        stroke: var(--card-background-color, #fff);
+        stroke-width: 1;
+      }
+      .series-chart text {
+        fill: var(--secondary-text-color, currentColor);
+        font-size: 11px;
+        font-family: inherit;
+      }
       .message, .toolbar {
         padding: 4px 16px 8px;
         color: var(--secondary-text-color);
@@ -333,6 +414,7 @@ export class TeslaLoggerCard extends LitElement {
           ${this.tab("drives", this.text.drives)}
           ${this.tab("charges", this.text.charges)}
           ${this.tab("stats", this.text.stats)}
+          ${this.tab("charts", this.text.charts)}
         </div>
         ${this._error ? html`<p class="message">${this._error}</p>` : nothing}
         ${this._loading ? html`<p class="message">${this.text.loading}</p>` : nothing}
@@ -484,6 +566,9 @@ export class TeslaLoggerCard extends LitElement {
     if (this._view === "charges") {
       return this.charges();
     }
+    if (this._view === "charts") {
+      return this.charts();
+    }
     return this.stats();
   }
 
@@ -584,18 +669,7 @@ export class TeslaLoggerCard extends LitElement {
     const stats = this._stats;
     const efficiency = whPerKm(stats?.energy_used_kwh, stats?.distance_km);
     return html`
-      <div class="periods">
-        ${(["week", "month", "year"] as Period[]).map(
-          (period) => html`
-            <button
-              class=${this._period === period ? "active" : ""}
-              @click=${() => this.setPeriod(period)}
-            >
-              ${this.text[period]}
-            </button>
-          `,
-        )}
-      </div>
+      ${this.periodBar()}
       ${stats
         ? html`
             <div class="grid">
@@ -612,6 +686,82 @@ export class TeslaLoggerCard extends LitElement {
             </div>
           `
         : nothing}
+    `;
+  }
+
+  private periodBar() {
+    return html`
+      <div class="periods" role="group" aria-label=${this.text.period}>
+        ${(["week", "month", "year"] as Period[]).map(
+          (period) => html`
+            <button
+              type="button"
+              aria-pressed=${this._period === period ? "true" : "false"}
+              class=${this._period === period ? "active" : ""}
+              @click=${() => this.setPeriod(period)}
+            >
+              ${this.text[period]}
+            </button>
+          `,
+        )}
+      </div>
+    `;
+  }
+
+  private charts() {
+    const series = this._series;
+    const buckets = series?.buckets ?? [];
+    return html`
+      ${this.periodBar()}
+      ${series && buckets.length === 0
+        ? html`<p class="message">${this.text.emptySeries}</p>`
+        : nothing}
+      ${buckets.length
+        ? html`
+            <div class="series-list">
+              ${this.seriesFigure("line", this.text.consumptionChart, "Wh/km", (bucket) =>
+                finiteOrNull(bucket.wh_per_km),
+              )}
+              ${this.seriesFigure("bar", this.text.distance, "km", (bucket) =>
+                finiteOrNull(bucket.distance_km),
+              )}
+              ${this.seriesFigure("bar", this.text.chargedChart, "kWh", (bucket) =>
+                finiteOrNull(bucket.energy_charged_kwh),
+              )}
+            </div>
+          `
+        : nothing}
+    `;
+  }
+
+  private seriesFigure(
+    kind: "bar" | "line",
+    title: string,
+    unit: string,
+    read: (bucket: StatsBucket) => number | null,
+  ) {
+    const buckets = this._series?.buckets ?? [];
+    const digits = unit === "Wh/km" ? 0 : 1;
+    const points: ChartPoint[] = buckets.map((bucket) => {
+      const value = read(bucket);
+      const label = bucketLabel(bucket.start, this._period, this.cardLang);
+      const shown = value == null ? "—" : `${formatNumber(value, digits, this.cardLang)} ${unit}`;
+      return { label, value, title: `${label} · ${shown}` };
+    });
+    const latest = points[points.length - 1];
+    const latestText =
+      latest?.value == null ? "—" : `${formatNumber(latest.value, digits, this.cardLang)} ${unit}`;
+    const summary = `${title}. ${this.text.latest} ${latestText}`;
+    const formatTick = (value: number) =>
+      formatNumber(value, value >= 10 || value === 0 ? 0 : 1, this.cardLang);
+    return html`
+      <figure class="series-card">
+        <figcaption>
+          <span class="series-title">${title}</span>
+          <span class="series-value">${this.text.latest} ${latestText}</span>
+        </figcaption>
+        ${seriesChart(points, kind, summary, formatTick)}
+      </figure>
     `;
   }
 
@@ -735,6 +885,10 @@ export class TeslaLoggerCard extends LitElement {
 
   private setPeriod(period: Period): void {
     this._period = period;
+    if (this._view === "charts") {
+      void this.loadSeries();
+      return;
+    }
     this._stats = undefined;
     void this.loadStats();
   }
@@ -760,6 +914,8 @@ export class TeslaLoggerCard extends LitElement {
     this._charges = undefined;
     this._detail = undefined;
     this._stats = undefined;
+    this._series = undefined;
+    this._seriesPeriod = undefined;
     this._page = 1;
     this._error = "";
   }
@@ -771,6 +927,8 @@ export class TeslaLoggerCard extends LitElement {
       await this.loadCharges();
     } else if (this._view === "stats" && !this._stats) {
       await this.loadStats();
+    } else if (this._view === "charts" && this._seriesPeriod !== this._period) {
+      await this.loadSeries();
     } else if (this._view === "drive" && this._driveId != null && !this._detail) {
       await this.loadDrive();
     }
@@ -807,6 +965,22 @@ export class TeslaLoggerCard extends LitElement {
         throw new Error(this.text.failed);
       }
       this._detail = payload;
+    });
+  }
+
+  private async loadSeries(): Promise<void> {
+    const period = this._period;
+    this._series = undefined;
+    await this.load("charts", async () => {
+      const payload = await this.call("get_stats_series", {
+        period,
+        count: SERIES_COUNT[period],
+      });
+      if (!isSeries(payload)) {
+        throw new Error(this.text.failed);
+      }
+      this._series = payload;
+      this._seriesPeriod = period;
     });
   }
 
@@ -935,6 +1109,7 @@ const SCHEMA = [
           { value: "drives", label: "Drives" },
           { value: "charges", label: "Charges" },
           { value: "stats", label: "Stats" },
+          { value: "charts", label: "Charts" },
         ],
       },
     },

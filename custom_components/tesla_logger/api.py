@@ -213,6 +213,22 @@ class TeslaLoggerApi:
             raise TeslaLoggerApiError("unexpected stats payload")
         return payload
 
+    async def get_stats_series(
+        self,
+        vehicle_id: int,
+        *,
+        period: str,
+        count: int,
+    ) -> dict[str, Any]:
+        """Return oldest-to-newest buckets for one vehicle."""
+        payload = await self._get(
+            f"/api/v1/vehicles/{vehicle_id}/stats/series",
+            {"period": period, "count": count},
+        )
+        if not isinstance(payload, dict):
+            raise TeslaLoggerApiError("unexpected stats series payload")
+        return payload
+
     async def list_geofences(self) -> list[dict[str, Any]]:
         payload = await self._get("/api/v1/geofences")
         if not isinstance(payload, list):

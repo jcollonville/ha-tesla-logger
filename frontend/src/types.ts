@@ -36,7 +36,7 @@ export interface CardConfig {
   default_view?: ViewName;
 }
 
-export type ViewName = "status" | "drives" | "drive" | "charges" | "stats";
+export type ViewName = "status" | "drives" | "drive" | "charges" | "stats" | "charts";
 export type Period = "week" | "month" | "year";
 
 export interface Drive {
@@ -93,4 +93,17 @@ export interface Stats {
   energy_used_kwh: number;
   charge_count: number;
   energy_added_kwh: number;
+}
+
+export interface StatsBucket {
+  start: string;
+  distance_km?: number | null;
+  energy_used_kwh?: number | null;
+  wh_per_km?: number | null;
+  energy_charged_kwh?: number | null;
+}
+
+export interface StatsSeries {
+  period?: Period;
+  buckets: StatsBucket[];
 }

@@ -135,6 +135,15 @@
         "from": { "name": "Depuis", "description": "Début de la période." },
         "to": { "name": "Jusqu'à", "description": "Fin de la période." }
       }
+    },
+    "get_stats_series": {
+      "name": "Obtenir la série de statistiques",
+      "description": "Retourne la distance, la consommation et l'énergie chargée par semaine, mois ou année.",
+      "fields": {
+        "device_id": { "name": "Véhicule", "description": "Véhicule Tesla Logger." },
+        "period": { "name": "Période", "description": "Taille des périodes : week, month ou year." },
+        "count": { "name": "Nombre", "description": "Nombre de périodes, de 1 à 60, de la plus ancienne à la plus récente." }
+      }
     }
   }
 }

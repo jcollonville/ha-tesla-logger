@@ -19,6 +19,7 @@ from .const import (
     SERVICE_GET_DRIVE,
     SERVICE_GET_DRIVES,
     SERVICE_GET_STATS,
+    SERVICE_GET_STATS_SERIES,
 )
 from .coordinator import TeslaLoggerCoordinator, TeslaLoggerHub
 from .redact import redact_secrets
@@ -111,6 +112,16 @@ def async_register_services(hass: HomeAssistant) -> None:
             )
         )
 
+    async def get_stats_series(call: ServiceCall) -> dict[str, Any]:
+        hub, coordinator = _resolve(hass, call.data["device_id"])
+        return await _call(
+            hub.api.get_stats_series(
+                coordinator.meta.vehicle_id,
+                period=call.data["period"],
+                count=call.data["count"],
+            )
+        )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_GET_DRIVES,
@@ -153,6 +164,21 @@ def async_register_services(hass: HomeAssistant) -> None:
         ),
         supports_response=SupportsResponse.ONLY,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_STATS_SERIES,
+        get_stats_series,
+        schema=vol.Schema(
+            {
+                vol.Required("device_id"): cv.string,
+                vol.Required("period"): vol.In(("week", "month", "year")),
+                vol.Optional("count", default=12): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=60)
+                ),
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
 
 def async_unload_services(hass: HomeAssistant) -> None:
@@ -162,6 +188,7 @@ def async_unload_services(hass: HomeAssistant) -> None:
         SERVICE_GET_DRIVE,
         SERVICE_GET_CHARGES,
         SERVICE_GET_STATS,
+        SERVICE_GET_STATS_SERIES,
     ):
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)

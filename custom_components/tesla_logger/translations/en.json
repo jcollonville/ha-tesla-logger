@@ -135,6 +135,15 @@
         "from": { "name": "From", "description": "Start of the period." },
         "to": { "name": "To", "description": "End of the period." }
       }
+    },
+    "get_stats_series": {
+      "name": "Get stats series",
+      "description": "Return distance, consumption, and energy charged by week, month, or year.",
+      "fields": {
+        "device_id": { "name": "Vehicle", "description": "Tesla Logger vehicle." },
+        "period": { "name": "Period", "description": "Bucket size: week, month, or year." },
+        "count": { "name": "Count", "description": "Number of buckets, from 1 to 60, oldest first." }
+      }
     }
   }
 }

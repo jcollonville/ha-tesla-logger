@@ -22,6 +22,7 @@ class FakeState:
         self.rest_unauthorized = False
         self.paths: list[str] = []
         self.headers: list[str] = []
+        self.series_calls: list[dict[str, str]] = []
         self.battery_level = 55.0
         self.ws_battery_level = 80.0
         self.last_error: str | None = "token tl_shouldnotleak failed"
@@ -244,6 +245,38 @@ def make_app(state: FakeState) -> web.Application:
             raise web.HTTPBadRequest(text='{"error":"vehicle_id is required"}')
         return web.json_response(state.stats(dict(request.query)))
 
+    async def stats_series(request: web.Request) -> web.Response:
+        _auth(request)
+        period = request.query.get("period", "month")
+        state.series_calls.append(
+            {
+                "id": request.match_info["id"],
+                "period": period,
+                "count": request.query.get("count", ""),
+            }
+        )
+        return web.json_response(
+            {
+                "period": period,
+                "buckets": [
+                    {
+                        "start": "2026-10-01T00:00:00Z",
+                        "distance_km": 100.0,
+                        "energy_used_kwh": 18.0,
+                        "wh_per_km": 180.0,
+                        "energy_charged_kwh": 20.0,
+                    },
+                    {
+                        "start": "2026-11-01T00:00:00Z",
+                        "distance_km": 120.5,
+                        "energy_used_kwh": None,
+                        "wh_per_km": None,
+                        "energy_charged_kwh": 25.0,
+                    },
+                ],
+            }
+        )
+
     async def geofences(request: web.Request) -> web.Response:
         _auth(request)
         return web.json_response(
@@ -297,6 +330,7 @@ def make_app(state: FakeState) -> web.Application:
     app.router.add_get("/api/v1/drives/{id}", drive)
     app.router.add_get("/api/v1/charges", charges)
     app.router.add_get("/api/v1/stats", stats)
+    app.router.add_get("/api/v1/vehicles/{id}/stats/series", stats_series)
     app.router.add_get("/api/v1/geofences", geofences)
     app.router.add_get("/api/v1/ws", websocket)
     return app
