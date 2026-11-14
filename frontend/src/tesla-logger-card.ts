@@ -1,6 +1,4 @@
-import * as L from "leaflet";
-import leafletCss from "leaflet/dist/leaflet.css?inline";
-import { LitElement, css, html, nothing, unsafeCSS } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { activityLabel, copy, language, type Copy, type Lang } from "./i18n";
 import {
@@ -51,8 +49,6 @@ import type {
   TempBin,
   ViewName,
 } from "./types";
-
-const CARD_TYPE = "tesla-logger-card";
 
 function isPage<T>(value: unknown): value is Page<T> {
   const record = asRecord(value);
@@ -105,6 +101,7 @@ export class TeslaLoggerCard extends LitElement {
     _error: { state: true },
     _plotWidths: { state: true },
     _headerBox: { state: true },
+    _headerVisible: { state: true },
   };
 
   hass?: HomeAssistant;
@@ -125,14 +122,14 @@ export class TeslaLoggerCard extends LitElement {
   private _driveId?: number;
   private _plotWidths: Record<string, number> = {};
   private _headerBox = { width: 0, height: 0 };
+  private _headerVisible = false;
   private _resize?: ResizeObserver;
-  private map?: L.Map;
-  private mapEl?: HTMLDivElement;
-  private routeLayer?: L.LayerGroup;
+  private _onScreen?: IntersectionObserver;
+  private routeMap?: { element: HTMLDivElement; destroy(): void };
+  private mapToken = 0;
+  private mapModule?: Promise<typeof import("./leaflet-map")>;
 
-  static styles = [
-    unsafeCSS(leafletCss),
-    css`
+  static styles = css`
       :host {
         display: block;
       }
@@ -621,8 +618,7 @@ export class TeslaLoggerCard extends LitElement {
           grid-template-columns: 1fr;
         }
       }
-    `,
-  ];
+    `;
 
   setConfig(config: CardConfig): void {
     if (!config || typeof config.entity !== "string" || !config.entity) {
@@ -649,7 +645,7 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   static getConfigElement(): HTMLElement {
-    return document.createElement("tesla-logger-card-editor");
+    return document.createElement("tesla-logger-card-editor-impl");
   }
 
   static getStubConfig(hass: HomeAssistant): CardConfig {
@@ -665,6 +661,7 @@ export class TeslaLoggerCard extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.watchVisibility();
     if (typeof ResizeObserver !== "function") {
       return;
     }
@@ -713,10 +710,31 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this._onScreen?.disconnect();
+    this._onScreen = undefined;
     this._resize?.disconnect();
     this._resize = undefined;
     this.destroyMap();
     super.disconnectedCallback();
+  }
+
+  private watchVisibility(): void {
+    if (this._headerVisible || this._onScreen) {
+      return;
+    }
+    if (typeof IntersectionObserver !== "function") {
+      this._headerVisible = true;
+      return;
+    }
+    this._onScreen = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) {
+        return;
+      }
+      this._onScreen?.disconnect();
+      this._onScreen = undefined;
+      this._headerVisible = true;
+    });
+    this._onScreen.observe(this);
   }
 
   private readonly watchSize = (element: Element | undefined): void => {
@@ -729,11 +747,17 @@ export class TeslaLoggerCard extends LitElement {
     if (changed.has("_view") || changed.has("_config")) {
       void this.ensureView();
     }
-    if (this._view === "drive" && (changed.has("_detail") || changed.has("_view"))) {
+    if (
+      this._view === "drive" &&
+      (changed.has("_detail") || changed.has("_view") || changed.has("_headerVisible"))
+    ) {
       this.syncMap();
     }
     if (changed.has("_view") && this._view !== "drive") {
       this.destroyMap();
+    }
+    if (this.shouldLoadMapChunk()) {
+      void this.loadMapModule().catch(() => undefined);
     }
   }
 
@@ -856,20 +880,47 @@ export class TeslaLoggerCard extends LitElement {
     return this._config?.show_map !== false;
   }
 
+  private headerMapReady(): boolean {
+    if (!this.mapEnabled()) {
+      return false;
+    }
+    const position = this.carPosition();
+    const { width, height } = this._headerBox;
+    return Boolean(position && width >= 32 && height >= 32);
+  }
+
+  private shouldLoadMapChunk(): boolean {
+    if (!this._headerVisible) {
+      return false;
+    }
+    if (this._view === "drive" && (this._detail?.route.length ?? 0) > 0) {
+      return true;
+    }
+    return this.headerMapReady();
+  }
+
+  private loadMapModule(): Promise<typeof import("./leaflet-map")> {
+    this.mapModule ??= import("./leaflet-map").catch((error: unknown) => {
+      this.mapModule = undefined;
+      throw error;
+    });
+    return this.mapModule;
+  }
+
   private carPosition(): { lat: number; lon: number } | null {
     const tracker = this.readings.get("location");
     return readPosition(tracker?.attributes.latitude, tracker?.attributes.longitude);
   }
 
   private watermark() {
-    if (!this.mapEnabled()) {
+    if (!this._headerVisible || !this.headerMapReady()) {
       return nothing;
     }
     const position = this.carPosition();
-    const { width, height } = this._headerBox;
-    if (!position || width < 32 || height < 32) {
+    if (!position) {
       return nothing;
     }
+    const { width, height } = this._headerBox;
     const view = tilesForView(position.lat, position.lon, width, height);
     const dark = Boolean(this.hass?.themes?.darkMode);
     return html`
@@ -1642,59 +1693,34 @@ export class TeslaLoggerCard extends LitElement {
     const el = this.renderRoot.querySelector<HTMLDivElement>(".map");
     const route = this._detail?.route ?? [];
     if (!el || route.length === 0) {
+      this.destroyMap();
       return;
     }
-    if (this.map && this.mapEl !== el) {
-      this.destroyMap();
+    if (!this._headerVisible) {
+      return;
     }
-    if (!this.map) {
-      this.map = L.map(el, { zoomControl: true, attributionControl: true });
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        // HA serves Referrer-Policy: no-referrer; override per-tile so OSM gets a Referer.
-        referrerPolicy: "strict-origin-when-cross-origin",
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      }).addTo(this.map);
-      if (this.hass?.themes?.darkMode) {
-        const pane = this.map.getPane("tilePane");
-        if (pane) {
-          pane.style.filter = "invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9)";
+    const token = ++this.mapToken;
+    const dark = Boolean(this.hass?.themes?.darkMode);
+    const color = getComputedStyle(this).getPropertyValue("--primary-color").trim() || "#03a9f4";
+    void this.loadMapModule()
+      .then((mod) => {
+        if (token !== this.mapToken || !this.isConnected) {
+          return;
         }
-      }
-      this.mapEl = el;
-    }
-    this.routeLayer?.remove();
-    const group = L.layerGroup().addTo(this.map);
-    const latlngs = route.map(
-      (point) => [point.latitude, point.longitude] as [number, number],
-    );
-    const color =
-      getComputedStyle(this).getPropertyValue("--primary-color").trim() || "#03a9f4";
-    const line = L.polyline(latlngs, { color, weight: 4 }).addTo(group);
-    L.circleMarker(latlngs[0], {
-      radius: 6,
-      color: "#2e7d32",
-      fillColor: "#2e7d32",
-      fillOpacity: 1,
-    }).addTo(group);
-    const end = latlngs[latlngs.length - 1];
-    L.circleMarker(end, {
-      radius: 6,
-      color: "#c62828",
-      fillColor: "#c62828",
-      fillOpacity: 1,
-    }).addTo(group);
-    this.routeLayer = group;
-    this.map.fitBounds(line.getBounds().pad(0.15));
-    requestAnimationFrame(() => this.map?.invalidateSize());
+        const current = this.renderRoot.querySelector<HTMLDivElement>(".map");
+        if (current !== el) {
+          return;
+        }
+        this.routeMap = mod.mountRoute(this.routeMap, el, route, dark, color);
+      })
+      .catch(() => undefined);
   }
 
   private destroyMap(): void {
-    this.map?.remove();
-    this.map = undefined;
-    this.mapEl = undefined;
-    this.routeLayer = undefined;
+    this.mapToken += 1;
+    const current = this.routeMap;
+    this.routeMap = undefined;
+    current?.destroy();
   }
 }
 
@@ -1750,7 +1776,7 @@ const SCHEMA = [
   },
 ];
 
-class TeslaLoggerCardEditor extends LitElement {
+export class TeslaLoggerCardEditor extends LitElement {
   static properties = {
     hass: { attribute: false },
     _config: { state: true },
@@ -1790,30 +1816,9 @@ class TeslaLoggerCardEditor extends LitElement {
   }
 }
 
-if (!customElements.get(CARD_TYPE)) {
-  customElements.define(CARD_TYPE, TeslaLoggerCard);
+if (!customElements.get("tesla-logger-card-impl")) {
+  customElements.define("tesla-logger-card-impl", TeslaLoggerCard);
 }
-if (!customElements.get("tesla-logger-card-editor")) {
-  customElements.define("tesla-logger-card-editor", TeslaLoggerCardEditor);
-}
-
-window.customCards = window.customCards || [];
-if (!window.customCards.some((card) => card.type === CARD_TYPE)) {
-  window.customCards.push({
-    type: CARD_TYPE,
-    name: "Tesla Logger",
-    description: "Vehicle status, drives, charges, and stats from tesla-logger",
-    preview: false,
-  });
-}
-
-declare global {
-  interface Window {
-    customCards?: Array<{
-      type: string;
-      name: string;
-      description: string;
-      preview?: boolean;
-    }>;
-  }
+if (!customElements.get("tesla-logger-card-editor-impl")) {
+  customElements.define("tesla-logger-card-editor-impl", TeslaLoggerCardEditor);
 }

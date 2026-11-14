@@ -1,13 +1,33 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { safeError } from "./format";
+import "./loader";
 import { TeslaLoggerCard } from "./tesla-logger-card";
-import type { Charge, Drive, HomeAssistant, Page, StatsSeries, TempBin } from "./types";
+import type { CardConfig, Charge, Drive, HomeAssistant, Page, StatsSeries, TempBin } from "./types";
 
 const HISTORY_ERROR = {
   code: "home_assistant_error",
   message: "The action requires responses and must be called with return_response=True.",
 };
+
+describe("card shell", () => {
+  it("uses the same stub config as the implementation", () => {
+    const hass = {
+      states: {
+        "device_tracker.car": {
+          state: "home",
+          attributes: { key: "location" },
+        },
+      },
+      callService: vi.fn(),
+    } as unknown as HomeAssistant;
+    const shell = customElements.get("tesla-logger-card") as unknown as {
+      getStubConfig(hass: HomeAssistant): CardConfig;
+    };
+    expect(shell.getStubConfig(hass)).toEqual(TeslaLoggerCard.getStubConfig(hass));
+    expect(shell.getStubConfig(hass).entity).toBe("device_tracker.car");
+  });
+});
 
 describe("safeError", () => {
   it("shows the message from a Home Assistant error object", () => {
@@ -283,6 +303,48 @@ function metaParts(row: Element): Array<string | null> {
   return Array.from(row.querySelectorAll(".entry-meta > span"), (node) => node.textContent);
 }
 
+function stubHeaderLayout(width: number, height: number): void {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly cb: ResizeObserverCallback) {}
+      observe(target: Element): void {
+        const host = target as HTMLElement;
+        const rect =
+          host.dataset.mapHost != null
+            ? { width, height, top: 0, left: 0, bottom: height, right: width, x: 0, y: 0 }
+            : { width: 1600, height: 208, top: 0, left: 0, bottom: 208, right: 1600, x: 0, y: 0 };
+        this.cb(
+          [{ target, contentRect: rect } as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        );
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+}
+
+function stubVisible(visible: boolean): void {
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(private readonly cb: IntersectionObserverCallback) {}
+      observe(target: Element): void {
+        if (!visible) {
+          return;
+        }
+        this.cb(
+          [{ isIntersecting: true, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+}
+
 describe("header map", () => {
   function trackerHass(latitude?: number, longitude?: number): HomeAssistant {
     const hass = frenchHass();
@@ -324,21 +386,8 @@ describe("header map", () => {
   }
 
   it("drops coordinates and the header range, and paints only the visible tiles", async () => {
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        constructor(private readonly cb: ResizeObserverCallback) {}
-        observe(target: Element): void {
-          const host = target as HTMLElement;
-          const rect = host.dataset.mapHost != null
-            ? { width: 360, height: 96, top: 0, left: 0, bottom: 96, right: 360, x: 0, y: 0 }
-            : { width: 1600, height: 208, top: 0, left: 0, bottom: 208, right: 1600, x: 0, y: 0 };
-          this.cb([{ target, contentRect: rect } as ResizeObserverEntry], this as unknown as ResizeObserver);
-        }
-        unobserve(): void {}
-        disconnect(): void {}
-      },
-    );
+    stubHeaderLayout(360, 96);
+    stubVisible(true);
     const card = await mountHeader(trackerHass(0, 0));
     const header = card.shadowRoot?.querySelector(".header");
     expect(header?.querySelector(".name")?.textContent).toBe("Red");
@@ -362,6 +411,15 @@ describe("header map", () => {
     const chart = card.shadowRoot?.querySelector(".series-chart");
     expect(chart).toBeNull();
     vi.unstubAllGlobals();
+  });
+
+  it("does not request header tiles until the card is visible", async () => {
+    stubHeaderLayout(360, 96);
+    stubVisible(false);
+    const card = await mountHeader(trackerHass(0, 0));
+    expect(card.shadowRoot?.querySelector(".map-bg")).toBeNull();
+    expect(card.shadowRoot?.querySelector(".map-bg img")).toBeNull();
+    expect(card.shadowRoot?.textContent).not.toContain("0.0000");
   });
 
   it("skips the map without a position or when show_map is false", async () => {

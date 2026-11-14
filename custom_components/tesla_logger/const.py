@@ -10,7 +10,8 @@ from typing import Final
 from homeassistant.const import Platform
 
 DOMAIN: Final = "tesla_logger"
-CARD_PATH: Final = "/tesla_logger/tesla-logger-card.js"
+CARD_STATIC_PATH: Final = "/tesla_logger"
+CARD_PATH: Final = f"{CARD_STATIC_PATH}/tesla-logger-card.js"
 
 
 def _manifest_version() -> str:
