@@ -48,7 +48,7 @@ Le serveur est en lecture seule. L'intégration n'envoie aucune commande au véh
 
 Les changements Python dans `custom_components/tesla_logger` sont pris en compte en redémarrant `hass`, ou en rechargeant l'intégration depuis **Appareils et services** (menu de Tesla Logger, **Recharger**). Un redémarrage recharge l'ensemble des modules.
 
-La carte servie est `custom_components/tesla_logger/www/tesla-logger-card.js` (`/tesla_logger/tesla-logger-card.js`). Les sources sont dans `frontend/` : après modification, `npm run build` régénère ce fichier. Un rafraîchissement forcé du navigateur (**Ctrl+Shift+R**) suffit ensuite ; `hass` continue de tourner. L'URL de la carte porte `?v=` suivi de la version du manifeste. Tant que cette version ne change pas, le navigateur peut garder l'ancien script, d'où le rafraîchissement forcé.
+La carte servie est le répertoire `custom_components/tesla_logger/www/` (`/tesla_logger/`). Le module chargé sur chaque page est `tesla-logger-card.js` ; la carte et Leaflet sont des chunks séparés, avec un fichier `.gz` et un `.br` à côté de chaque script. Les sources sont dans `frontend/` : après modification, `npm run build` régénère ce répertoire. Un rafraîchissement forcé du navigateur (**Ctrl+Shift+R**) suffit ensuite ; `hass` continue de tourner. L'URL de la carte porte `?v=` suivi de la version du manifeste. Tant que cette version ne change pas, le navigateur peut garder l'ancien script, d'où le rafraîchissement forcé.
 
 ### Journaux
 
@@ -90,13 +90,13 @@ npm test
 npm run build
 ```
 
-La CI échoue si `custom_components/tesla_logger/www/tesla-logger-card.js` diffère du build, ou si ce fichier importe encore `lit` ou `leaflet` :
+La CI échoue si `custom_components/tesla_logger/www/` diffère du build, ou si un script importe encore `lit` ou `leaflet` :
 
 ```bash
-git diff --exit-code -- custom_components/tesla_logger/www/tesla-logger-card.js
+git diff --exit-code -- custom_components/tesla_logger/www
 ```
 
-Commiter `custom_components/tesla_logger/www/tesla-logger-card.js` avec les sources. HACS installe ce fichier tel quel et n'exécute pas Node.
+Commiter le contenu de `custom_components/tesla_logger/www/` avec les sources, y compris les chunks et les fichiers `.gz` / `.br`. HACS installe ces fichiers tels quels et n'exécute pas Node.
 
 ## Publier
 

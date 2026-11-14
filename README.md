@@ -91,7 +91,7 @@ response_variable: tesla_stats
 
 ## Lovelace card
 
-No dashboard resource is required. The integration serves `tesla-logger-card.js` and registers it with `add_extra_js_url`.
+No dashboard resource is required. The integration serves `/tesla_logger/` and registers `tesla-logger-card.js` with `add_extra_js_url`. That file is a small loader. The card and Leaflet download only when a card is shown, and Home Assistant serves the precompressed `.gz` / `.br` siblings.
 
 Add a **Tesla Logger** card and pick any entity from the vehicle. Every block is shown unless `show` says otherwise. A tab disappears when all of its blocks are hidden, and hidden blocks are not requested from the server.
 
@@ -147,7 +147,7 @@ npm run typecheck
 npm run build
 ```
 
-CI checks that `custom_components/tesla_logger/www/tesla-logger-card.js` matches the build.
+CI checks that `custom_components/tesla_logger/www/` matches the build.
 
 Tests use a local fake of the read API. They do not talk to a live tesla-logger server.
 

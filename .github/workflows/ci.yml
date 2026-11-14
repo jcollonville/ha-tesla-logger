@@ -62,8 +62,27 @@ jobs:
           npm run build
       - name: Built card is committed and self-contained
         run: |
-          git diff --exit-code -- custom_components/tesla_logger/www/tesla-logger-card.js
-          if grep -E "from ['\"](lit|leaflet)['\"]" custom_components/tesla_logger/www/tesla-logger-card.js; then
+          git diff --exit-code -- custom_components/tesla_logger/www
+          if grep -E "from ['\"](lit|leaflet)['\"]" custom_components/tesla_logger/www/*.js; then
             echo "Card bundle still imports lit or leaflet"
             exit 1
           fi
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          www = Path("custom_components/tesla_logger/www")
+          loader = (www / "tesla-logger-card.js").read_text(encoding="utf-8")
+          if len(loader.encode()) > 30_000:
+              raise SystemExit(f"loader is too large: {len(loader.encode())} bytes")
+          if not re.search(r"""import\(\s*["']\./[^"']+\.js\?v=""", loader):
+              raise SystemExit("loader is missing a relative versioned chunk import")
+          scripts = list(www.glob("*.js"))
+          leaflet = [path for path in scripts if path.name.startswith("leaflet-")]
+          if len(leaflet) != 1:
+              raise SystemExit(f"expected one leaflet chunk, found {[path.name for path in leaflet]}")
+          for script in scripts:
+              for suffix in (".gz", ".br"):
+                  sibling = Path(str(script) + suffix)
+                  if not sibling.is_file() or sibling.stat().st_size >= script.stat().st_size:
+                      raise SystemExit(f"missing smaller precompressed sibling for {script.name}")
+          PY

@@ -9,17 +9,23 @@ from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL, add_extra_j
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 
-from .const import CARD_PATH, CARD_URL, DOMAIN
+from .const import CARD_STATIC_PATH, CARD_URL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_register_card(hass: HomeAssistant) -> None:
-    """Register the card file and ask the frontend to load it."""
+    """Register the card directory and ask the frontend to load the loader."""
     data = hass.data.setdefault(DOMAIN, {})
-    card = Path(__file__).parent / "www" / "tesla-logger-card.js"
+    # Directory, not the loader file: code-split chunks live beside it.
+    # aiohttp FileResponse (HA 2025.1 / 2026.11, aiohttp >= 3.10) serves a
+    # sibling .br or .gz when Accept-Encoding allows it. The loader URL is
+    # already versioned with ?v=, so the static path can be cached.
+    www = Path(__file__).parent / "www"
     if not data.get("static_registered") and _http_ready(hass):
-        await hass.http.async_register_static_paths([StaticPathConfig(CARD_PATH, str(card), False)])
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(CARD_STATIC_PATH, str(www), cache_headers=True)]
+        )
         data["static_registered"] = True
     if not data.get("module_registered") and DATA_EXTRA_MODULE_URL in hass.data:
         add_extra_js_url(hass, CARD_URL)
