@@ -39,8 +39,8 @@ class FakeState:
             "battery_level": self.battery_level,
             "rated_range_km": 280.5,
             "odometer_km": 12345.6,
-            "latitude": 48.8566,
-            "longitude": 2.3522,
+            "latitude": 0,
+            "longitude": 0,
             "speed_kmh": 0,
             "charger_power_kw": 11,
             "last_poll_at": "2026-11-09T10:00:00Z",
@@ -57,8 +57,8 @@ class FakeState:
             "ideal_range_km": 320.0,
             "est_range_km": 260.0,
             "odometer_km": 12345.6,
-            "latitude": 48.8566,
-            "longitude": 2.3522,
+            "latitude": 0,
+            "longitude": 0,
             "heading_deg": 90,
             "speed_kmh": 0,
             "power_kw": -1.2,
@@ -109,10 +109,11 @@ class FakeState:
             "avg_speed_kmh": 36.8,
             "elevation_gain_m": 40,
             "elevation_loss_m": 35,
-            "start_latitude": 48.8566,
-            "start_longitude": 2.3522,
-            "end_latitude": 48.87,
-            "end_longitude": 2.37,
+            "start_latitude": 0,
+            "start_longitude": 0,
+            "end_latitude": 0,
+            "end_longitude": 1,
+            "start_geofence_id": 1,
         }
 
     def drive_detail(self) -> dict[str, Any]:
@@ -120,18 +121,18 @@ class FakeState:
         detail["route"] = [
             {
                 "recorded_at": "2026-11-09T08:00:00Z",
-                "latitude": 48.8566,
-                "longitude": 2.3522,
+                "latitude": 0,
+                "longitude": 0,
             },
             {
                 "recorded_at": "2026-11-09T08:15:00Z",
-                "latitude": 48.86,
-                "longitude": 2.36,
+                "latitude": 0,
+                "longitude": 0,
             },
             {
                 "recorded_at": "2026-11-09T08:30:00Z",
-                "latitude": 48.87,
-                "longitude": 2.37,
+                "latitude": 0,
+                "longitude": 0,
             },
         ]
         detail["series"] = [
@@ -170,6 +171,9 @@ class FakeState:
             "is_dc": False,
             "charger_type": "AC",
             "max_power_kw": 11,
+            "latitude": 0,
+            "longitude": 0,
+            "geofence_id": 1,
         }
 
     def stats(self, query: dict[str, str]) -> dict[str, Any]:
@@ -201,8 +205,8 @@ class FakeState:
             "charger_power_kw": 0,
             "inside_temp_c": 22,
             "outside_temp_c": 11,
-            "latitude": 48.8566,
-            "longitude": 2.3522,
+            "latitude": 0,
+            "longitude": 0,
             "at": "2026-11-09T11:00:00Z",
         }
 
@@ -321,8 +325,8 @@ def make_app(state: FakeState) -> web.Application:
                 {
                     "id": 1,
                     "name": "Home",
-                    "latitude": 48.8566,
-                    "longitude": 2.3522,
+                    "latitude": 0,
+                    "longitude": 0,
                     "radius_m": 200,
                 }
             ]
