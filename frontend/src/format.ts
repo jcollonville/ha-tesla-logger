@@ -154,7 +154,12 @@ export function formatDuration(seconds: number | null | undefined): string {
 
 export interface HistoryRowModel {
   datetime: string;
+  /** Full date and time, used as the accessible name. */
   when: string;
+  /** Time only, shown under the day heading. Cross-day rows keep the end date. */
+  clock: string;
+  dayKey: string;
+  dayLabel: string;
   place: string | null;
   /** Both ends of a drive, so each can ellipsize on its own. */
   ends: readonly [string, string] | null;
@@ -233,6 +238,44 @@ export function formatListRange(
   return `${formatDatePart(startDate, resolved)}, ${formatTimePart(startDate, resolved)}–${formatTimePart(endDate, resolved)}`;
 }
 
+/** Calendar day of a list row, in the Home Assistant zone. */
+export function listDay(start: string, prefs: Lang | DatePrefs): { key: string; label: string } {
+  const resolved = datePrefs(prefs);
+  const date = new Date(start);
+  if (Number.isNaN(date.getTime())) {
+    return { key: start, label: start };
+  }
+  return { key: calendarDay(date, resolved), label: formatDatePart(date, resolved) };
+}
+
+/**
+ * Clock range for a row that already shows its date as a heading.
+ * A trip that crosses midnight keeps the end date so that information stays.
+ */
+export function formatListClock(
+  start: string,
+  end: string | null | undefined,
+  prefs: Lang | DatePrefs,
+): string {
+  const resolved = datePrefs(prefs);
+  const startDate = new Date(start);
+  if (Number.isNaN(startDate.getTime())) {
+    return start;
+  }
+  const startTime = formatTimePart(startDate, resolved);
+  if (!end) {
+    return startTime;
+  }
+  const endDate = new Date(end);
+  if (Number.isNaN(endDate.getTime())) {
+    return startTime;
+  }
+  if (calendarDay(startDate, resolved) !== calendarDay(endDate, resolved)) {
+    return `${startTime} – ${formatDatePart(endDate, resolved)}, ${formatTimePart(endDate, resolved)}`;
+  }
+  return `${startTime}–${formatTimePart(endDate, resolved)}`;
+}
+
 function kwh(value: number | null | undefined, lang: Lang): string | null {
   const energy = finite(value);
   return energy == null ? null : `${formatNumber(energy, 1, lang)} kWh`;
@@ -253,9 +296,13 @@ export function driveHistory(drive: Drive, prefs: Lang | DatePrefs): HistoryRowM
   ];
   const details = present(slots);
   const distance = finite(drive.distance_km);
+  const day = listDay(drive.start_at, resolved);
   return {
     datetime: drive.start_at,
     when: formatListRange(drive.start_at, drive.end_at, resolved),
+    clock: formatListClock(drive.start_at, drive.end_at, resolved),
+    dayKey: day.key,
+    dayLabel: day.label,
     place,
     ends: start && end ? [start, end] : null,
     figure: distance == null ? null : `${formatNumber(distance, 1, lang)} km`,
@@ -291,9 +338,13 @@ export function chargeHistory(charge: Charge, prefs: Lang | DatePrefs): HistoryR
     chargeKind(charge),
   ];
   const details = present(slots);
+  const day = listDay(charge.start_at, resolved);
   return {
     datetime: charge.start_at,
     when: formatListRange(charge.start_at, charge.end_at, resolved),
+    clock: formatListClock(charge.start_at, charge.end_at, resolved),
+    dayKey: day.key,
+    dayLabel: day.label,
     place: named || descriptive,
     ends: null,
     figure: kwh(charge.energy_added_kwh, lang),

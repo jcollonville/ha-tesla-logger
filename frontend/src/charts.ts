@@ -73,6 +73,27 @@ export function currentBucketIndex(
   return found >= 0 ? found : Math.max(0, starts.length - 1);
 }
 
+/** Distance of the bucket before the one that contains `now`. */
+export function previousDistanceKm(
+  buckets: ReadonlyArray<{ start: string; distance_km?: number | null }>,
+  period: Period,
+  now = new Date(),
+): number | null {
+  if (buckets.length < 2) {
+    return null;
+  }
+  const index = currentBucketIndex(
+    buckets.map((bucket) => bucket.start),
+    period,
+    now,
+  );
+  if (index <= 0) {
+    return null;
+  }
+  const value = buckets[index - 1]?.distance_km;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export function bucketLabel(start: string, period: Period, prefs: Lang | DatePrefs): string {
   const date = new Date(start);
   if (Number.isNaN(date.getTime())) {
@@ -292,7 +313,7 @@ export function seriesValues(points: ReadonlyArray<object>, key: string): number
   return values;
 }
 
-export function sparkline(values: number[], width = 320, height = 56) {
+export function sparkline(values: number[], width = 320, height = 90) {
   if (values.length < 2) {
     return svg``;
   }

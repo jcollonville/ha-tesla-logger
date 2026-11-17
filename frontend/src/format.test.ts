@@ -6,6 +6,7 @@ import {
   detailLine,
   displayChargerType,
   driveHistory,
+  formatListClock,
   formatListRange,
   formatListTimestamp,
 } from "./format";
@@ -96,6 +97,17 @@ describe("formatListRange", () => {
       "Tue, Nov 10, 3:14 PM–3:29 PM",
     );
   });
+
+  it("keeps the end date when a clock range crosses midnight", () => {
+    const start = "2026-11-14T22:10:00Z";
+    const end = "2026-11-15T00:05:00Z";
+    expect(formatListClock(start, end, { language: "fr", hour12: false, timeZone: "UTC" })).toBe(
+      "22:10 – dim. 15 nov., 00:05",
+    );
+    expect(formatListClock(start, "2026-11-14T22:40:00Z", { language: "fr", hour12: false, timeZone: "UTC" })).toBe(
+      "22:10–22:40",
+    );
+  });
 });
 
 describe("history rows", () => {
@@ -117,6 +129,8 @@ describe("history rows", () => {
       "fr",
     );
     expect(row.when).toBe("lun. 9 nov., 08:00–08:30");
+    expect(row.clock).toBe("08:00–08:30");
+    expect(row.dayLabel).toBe("lun. 9 nov.");
     expect(row.details).toEqual(["30 min", "174 Wh/km", "70 → 64 %"]);
     expect(row.slots).toEqual(["30 min", "174 Wh/km", "70 → 64 %"]);
     expect(row.place).toBe("Maison → Bureau");

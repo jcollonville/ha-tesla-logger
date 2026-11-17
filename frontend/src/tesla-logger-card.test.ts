@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { safeError } from "./format";
 import "./loader";
-import { TeslaLoggerCard } from "./tesla-logger-card";
+import { TeslaLoggerCard, TeslaLoggerCardEditor } from "./tesla-logger-card";
 import type { CardConfig, Charge, Drive, HomeAssistant, Page, StatsSeries, TempBin } from "./types";
 
 const HISTORY_ERROR = {
@@ -170,7 +170,11 @@ describe("history lists", () => {
     const rows = Array.from(list?.querySelectorAll(".entry") ?? []);
     expect(rows).toHaveLength(4);
     expect(list?.getAttribute("data-slots")).toBe("4");
-    expect(rows[0].querySelector("time.entry-when")?.textContent).toBe("mar. 10 nov., 03:30");
+    expect(card.shadowRoot?.querySelector(".day-heading")?.textContent).toBe("mar. 10 nov.");
+    expect(rows[0].querySelector("time.entry-when")?.textContent).toBe("03:30");
+    expect(rows[0].querySelector("time.entry-when")?.getAttribute("aria-label")).toBe(
+      "mar. 10 nov., 03:30",
+    );
     expect(rows[0].querySelector("time.entry-when")?.getAttribute("datetime")).toBe(start);
     expect(rows[0].querySelector(".entry-figure")?.textContent).toBe("6,5 kWh");
     expect(chipTexts(rows[0])).toEqual(["40 min", "", "11 kW", "AC"]);
@@ -241,7 +245,9 @@ describe("history lists", () => {
     expect(rows).toHaveLength(2);
     expect(card.shadowRoot?.querySelector("ul.list")?.getAttribute("data-slots")).toBe("3");
     expect(rows[0].tagName).toBe("BUTTON");
-    expect(rows[0].querySelector("time.entry-when")?.textContent).toBe("lun. 9 nov., 08:00");
+    expect(card.shadowRoot?.querySelector(".day-heading")?.textContent).toBe("lun. 9 nov.");
+    expect(rows[0].querySelector("time.entry-when")?.textContent).toBe("08:00");
+    expect(rows[0].querySelector("time.entry-when")?.getAttribute("title")).toBe("lun. 9 nov., 08:00");
     expect(rows[0].querySelector(".entry-place")?.textContent).toBe("Maison→Bureau");
     expect(
       Array.from(rows[0].querySelectorAll(".place-point"), (node) => node.textContent),
@@ -313,7 +319,8 @@ describe("history lists", () => {
     const control = buttons[0] ? getComputedStyle(buttons[0]) : null;
     expect(Number.parseFloat(control?.width ?? "0")).toBeGreaterThanOrEqual(40);
     expect(Number.parseFloat(control?.height ?? "0")).toBeGreaterThanOrEqual(40);
-    expect(card.shadowRoot?.querySelector("time")?.textContent).toBe("Tue, Nov 10, 15:14–15:29");
+    expect(card.shadowRoot?.querySelector(".day-heading")?.textContent).toBe("Tue, Nov 10");
+    expect(card.shadowRoot?.querySelector("time")?.textContent).toBe("15:14–15:29");
 
     buttons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect((card as unknown as { _page: number })._page).toBe(3);
@@ -458,8 +465,10 @@ describe("header map", () => {
     expect(header?.querySelector(".pill")?.textContent?.trim()).not.toBe("");
     expect(header?.textContent).not.toContain("Autonomie");
     expect(header?.textContent).not.toContain("328");
-    const range = card.shadowRoot?.querySelector(".grid .metric");
-    expect(range?.querySelector("span")?.textContent).toBe("Autonomie");
+    const hero = Array.from(card.shadowRoot?.querySelectorAll(".status-hero .metric") ?? []);
+    expect(hero[0]?.querySelector("span")?.textContent).toBe("Batterie");
+    expect(hero[1]?.querySelector("span")?.textContent).toBe("Autonomie");
+    const range = hero[1];
     expect(range?.querySelector("strong")?.textContent).toBe("328 km");
     expect(range?.querySelector("ha-icon")?.getAttribute("icon")).toBe("mdi:map-marker-distance");
     const text = card.shadowRoot?.textContent ?? "";
@@ -573,21 +582,36 @@ describe("charts view", () => {
     const titles = Array.from(root?.querySelectorAll(".series-list .series-title") ?? []).map(
       (node) => node.textContent,
     );
-    expect(titles).toEqual(["Consommation", "Distance", "Énergie chargée"]);
+    expect(titles).toEqual(["Consommation"]);
     const tips = Array.from(root?.querySelectorAll(".series-list title") ?? []).map(
       (node) => node.textContent,
     );
     const consumptionTips = tips.filter((tip) => tip?.includes("Wh/km"));
     expect(consumptionTips).toHaveLength(1);
     expect(consumptionTips[0]).toContain("180 Wh/km");
-    expect(tips.some((tip) => tip?.includes("40,5 km"))).toBe(true);
-    expect(tips.some((tip) => tip?.includes("0,0 kWh"))).toBe(true);
     const values = Array.from(root?.querySelectorAll(".series-list .series-value") ?? []).map(
       (node) => node.textContent?.trim(),
     );
-    expect(values).toEqual(["Dernier —", "Dernier 40,5 km", "Dernier 0,0 kWh"]);
-    expect(root?.querySelectorAll(".series-list rect.bar")).toHaveLength(4);
+    expect(values[0]).toContain("180 Wh/km");
+    expect(values[0]).not.toContain("Dernier");
+    expect(root?.querySelectorAll(".series-list rect.bar")).toHaveLength(0);
     expect(root?.querySelectorAll(".series-list circle.dot")).toHaveLength(1);
+    const distanceButton = Array.from(root?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Distance",
+    );
+    distanceButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await card.updateComplete;
+    expect(root?.querySelector(".series-list .series-title")?.textContent).toBe("Distance");
+    expect(root?.querySelector(".series-list .series-value")?.textContent).toContain("40,5 km");
+    expect(root?.querySelector(".series-list .series-value")?.textContent).toContain("Ce mois");
+    const energyButton = Array.from(root?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent?.trim() === "Énergie chargée",
+    );
+    energyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await card.updateComplete;
+    expect(root?.querySelector(".series-list .series-value")?.textContent).toContain("0,0 kWh");
+    distanceButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await card.updateComplete;
     expect(root?.querySelector(".series-chart")?.getAttribute("role")).toBe("group");
     const chartBoxes = Array.from(root?.querySelectorAll(".series-chart") ?? []).map((node) =>
       Number(node.getAttribute("height")),
@@ -604,9 +628,9 @@ describe("charts view", () => {
       "Consommation à l'arrêt",
       "Consommation vs température",
     ]);
-    expect(root?.querySelector(".series-extra")?.textContent).toContain("0 % recharge rapide");
-    expect(root?.querySelector(".series-extra")?.textContent).toContain("2,00");
-    expect(root?.querySelector(".series-extra")?.textContent).toContain("0,05 /km");
+    expect(root?.querySelector(".series-extra")?.textContent).toContain(
+      "0 % recharge rapide · Coût 2,00 · 0,05 /km",
+    );
     expect(root?.querySelectorAll(".series-extra rect.bar.dc").length).toBeGreaterThan(0);
     expect(root?.querySelector(".series-extra")?.textContent).toContain("10–15°");
 
@@ -617,9 +641,7 @@ describe("charts view", () => {
     expect(totals()?.textContent).toContain("0,0 kWh");
     expect(totals()?.textContent).not.toContain("consommé");
 
-    const distanceMarks = root?.querySelectorAll("figure.series-card")[1]?.querySelectorAll(
-      "[role='button']",
-    );
+    const distanceMarks = root?.querySelector(".series-list")?.querySelectorAll("[role='button']");
     expect(distanceMarks?.[1]?.getAttribute("aria-pressed")).toBe("true");
     distanceMarks?.[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await card.updateComplete;
@@ -753,5 +775,149 @@ describe("show configuration", () => {
     expect(services).not.toContain("get_stats_series");
     expect(card.shadowRoot?.querySelector(".series-list")).toBeNull();
     expect(card.shadowRoot?.textContent).toContain("Consommation vs température");
+  });
+});
+
+describe("status groups", () => {
+  it("puts battery beside range and hides live charging tiles unless charging", async () => {
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    const hass = frenchHass();
+    hass.states["sensor.battery"] = { state: "72", attributes: { key: "battery_level", vin: "V" } };
+    hass.states["sensor.range"] = { state: "328", attributes: { key: "rated_range", vin: "V" } };
+    hass.states["sensor.charger"] = { state: "11", attributes: { key: "charger_power", vin: "V" } };
+    hass.states["sensor.activity"] = { state: "online", attributes: { key: "activity", vin: "V" } };
+    hass.entities = {
+      ...hass.entities,
+      "sensor.battery": { device_id: "device-1" },
+      "sensor.range": { device_id: "device-1" },
+      "sensor.charger": { device_id: "device-1" },
+      "sensor.activity": { device_id: "device-1" },
+    };
+    card.hass = hass;
+    card.setConfig({ entity: "sensor.tesla_location" });
+    await card.updateComplete;
+    const hero = Array.from(card.shadowRoot?.querySelectorAll(".status-hero .metric strong") ?? []).map(
+      (node) => node.textContent,
+    );
+    expect(hero).toEqual(["72 %", "328 km"]);
+    expect(card.shadowRoot?.querySelector(".ring text")?.textContent).toBe("72%");
+    expect(card.shadowRoot?.textContent).not.toContain("Chargeur");
+    hass.states["sensor.activity"] = { state: "charging", attributes: { key: "activity", vin: "V" } };
+    card.hass = { ...hass };
+    await card.updateComplete;
+    expect(card.shadowRoot?.textContent).toContain("Chargeur");
+    expect(card.shadowRoot?.textContent).toContain("11,0 kW");
+  });
+});
+
+describe("stats comparison", () => {
+  it("loads the previous period distance from the series", async () => {
+    const now = new Date();
+    const previous = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString();
+    const current = new Date(now.getFullYear(), now.getMonth(), 15).toISOString();
+    const callService = vi.fn().mockImplementation(async (_domain: string, service: string) => {
+      if (service === "get_stats") {
+        return {
+          response: {
+            drive_count: 4,
+            distance_km: 40.5,
+            drive_duration_s: 5400,
+            energy_used_kwh: 8,
+            charge_count: 1,
+            energy_added_kwh: 10,
+          },
+        };
+      }
+      return {
+        response: {
+          period: "month",
+          buckets: [
+            { start: previous, distance_km: 100 },
+            { start: current, distance_km: 40.5 },
+          ],
+        },
+      };
+    });
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    const hass = frenchHass();
+    hass.callService = callService;
+    card.hass = hass;
+    card.setConfig({ entity: "sensor.tesla_location", default_view: "stats" });
+    await card.updateComplete;
+    await vi.waitFor(() => {
+      expect(card.shadowRoot?.querySelector(".stats-hero")?.textContent).toContain("100,0 km");
+    });
+    const hero = card.shadowRoot?.querySelector(".stats-hero")?.textContent ?? "";
+    expect(hero).toContain("40,5 km");
+    expect(hero).toContain("mois précédent");
+    expect(callService.mock.calls.map((call) => call[1])).toEqual(["get_stats", "get_stats_series"]);
+  });
+});
+
+describe("editor schema", () => {
+  it("localizes view options and splits chart toggles", async () => {
+    const editor = new TeslaLoggerCardEditor();
+    mounted.push(editor as unknown as TeslaLoggerCard);
+    document.body.append(editor);
+    editor.hass = frenchHass();
+    editor.setConfig({ entity: "sensor.tesla_location" });
+    await editor.updateComplete;
+    const form = editor.shadowRoot?.querySelector("ha-form") as HTMLElement & {
+      schema?: Array<{ name: string; selector?: { select?: { options?: Array<{ label: string }> } } }>;
+    };
+    const names = form.schema?.map((item) => item.name);
+    expect(names).toEqual(["entity", "show_map", "default_view", "show", "show_charts"]);
+    expect(form.schema?.[2]?.selector?.select?.options?.map((option) => option.label)).toEqual([
+      "État",
+      "Trajets",
+      "Charges",
+      "Stats",
+      "Graphiques",
+    ]);
+    form.dispatchEvent(
+      new CustomEvent("value-changed", {
+        detail: {
+          value: {
+            entity: "sensor.tesla_location",
+            show_map: true,
+            show: { status: false, drives: true, charges: true, totals: true },
+            show_charts: { chart_distance: false },
+          },
+        },
+        bubbles: true,
+      }),
+    );
+    const config = (editor as unknown as { _config?: CardConfig })._config;
+    expect(config?.show?.status).toBe(false);
+    expect(config?.show?.chart_distance).toBe(false);
+    expect(config?.show?.chart_consumption).toBe(true);
+    expect(config).not.toHaveProperty("show_charts");
+  });
+});
+
+describe("narrow charts", () => {
+  it("collapses the extra charts behind a disclosure", async () => {
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    card.hass = frenchHass();
+    card.setConfig({ entity: "sensor.tesla_location", default_view: "charts" });
+    const state = card as unknown as { _narrow: boolean; _series: StatsSeries; _seriesPeriod: string };
+    state._narrow = true;
+    state._seriesPeriod = "month";
+    state._series = {
+      period: "month",
+      buckets: [{ start: new Date().toISOString(), distance_km: 1, wh_per_km: 100, energy_charged_kwh: 1 }],
+    };
+    await card.updateComplete;
+    const details = card.shadowRoot?.querySelector("details.extras");
+    expect(details).toBeTruthy();
+    expect(details?.hasAttribute("open")).toBe(false);
+    expect(details?.querySelector("summary")?.textContent).toBe("Autres graphiques");
+    expect(card.shadowRoot?.querySelector(".series-extra")).toBeTruthy();
   });
 });
