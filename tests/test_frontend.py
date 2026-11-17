@@ -64,7 +64,7 @@ def test_built_chunks_are_precompressed_and_split() -> None:
             assert sibling.is_file()
             assert sibling.stat().st_size < script.stat().st_size
     manifest = json.loads((WWW.parent / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["version"] == "0.1.12"
+    assert manifest["version"] == "0.1.13"
 
 
 async def test_aiohttp_serves_precompressed_siblings(tmp_path: Path, allow_sockets) -> None:

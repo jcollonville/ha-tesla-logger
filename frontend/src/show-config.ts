@@ -20,6 +20,20 @@ export type ShowFlags = Record<ShowKey, boolean>;
 
 export const SHOW_KEYS = Object.keys(SHOW_DEFAULTS) as ShowKey[];
 
+/** Status toggles, including the totals strip. */
+export const VIEW_SHOW_KEYS = ["status", "drives", "charges", "totals"] as const satisfies readonly ShowKey[];
+
+/** Chart toggles, kept separate in the editor. */
+export const CHART_SHOW_KEYS = [
+  "chart_consumption",
+  "chart_distance",
+  "chart_energy",
+  "battery_health",
+  "charging_split",
+  "vampire_drain",
+  "consumption_vs_temp",
+] as const satisfies readonly ShowKey[];
+
 export function showFlags(config: CardConfig | undefined): ShowFlags {
   const flags: ShowFlags = { ...SHOW_DEFAULTS };
   const raw = config?.show;
