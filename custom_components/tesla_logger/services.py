@@ -23,6 +23,7 @@ from .const import (
     SERVICE_GET_STATS_SERIES,
 )
 from .coordinator import TeslaLoggerCoordinator, TeslaLoggerHub
+from .parsing import label_charge_page, label_drive_page
 from .redact import redact_secrets
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,6 +61,15 @@ def _resolve(hass: HomeAssistant, device_id: str) -> tuple[TeslaLoggerHub, Tesla
     raise ServiceValidationError("Vehicle is unavailable")
 
 
+async def _fences(hub: TeslaLoggerHub) -> list[dict[str, Any]]:
+    """Geofences used to name a drive. History still loads if this fails."""
+    try:
+        return await hub.async_geofences()
+    except (TeslaLoggerApiError, TeslaLoggerAuthError):
+        _LOGGER.debug("Geofences unavailable; drive places stay unnamed")
+        return []
+
+
 async def _call(action: Awaitable[Any]) -> dict[str, Any]:
     try:
         payload = await action
@@ -79,7 +89,7 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     async def get_drives(call: ServiceCall) -> dict[str, Any]:
         hub, coordinator = _resolve(hass, call.data["device_id"])
-        return await _call(
+        payload = await _call(
             hub.api.list_drives(
                 coordinator.meta.vehicle_id,
                 start=call.data.get("from"),
@@ -88,6 +98,7 @@ def async_register_services(hass: HomeAssistant) -> None:
                 per_page=call.data["per_page"],
             )
         )
+        return label_drive_page(payload, await _fences(hub))
 
     async def get_drive(call: ServiceCall) -> dict[str, Any]:
         hub, coordinator = _resolve(hass, call.data["device_id"])
@@ -95,11 +106,11 @@ def async_register_services(hass: HomeAssistant) -> None:
         owner = payload.get("vehicle_id")
         if owner is not None and int(owner) != coordinator.meta.vehicle_id:
             raise ServiceValidationError("Drive belongs to another vehicle")
-        return payload
+        return label_drive_page(payload, await _fences(hub))
 
     async def get_charges(call: ServiceCall) -> dict[str, Any]:
         hub, coordinator = _resolve(hass, call.data["device_id"])
-        return await _call(
+        payload = await _call(
             hub.api.list_charges(
                 coordinator.meta.vehicle_id,
                 start=call.data.get("from"),
@@ -108,6 +119,7 @@ def async_register_services(hass: HomeAssistant) -> None:
                 per_page=call.data["per_page"],
             )
         )
+        return label_charge_page(payload, await _fences(hub))
 
     async def get_stats(call: ServiceCall) -> dict[str, Any]:
         hub, coordinator = _resolve(hass, call.data["device_id"])

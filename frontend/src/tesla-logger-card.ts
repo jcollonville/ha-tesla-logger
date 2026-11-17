@@ -1424,7 +1424,7 @@ export class TeslaLoggerCard extends LitElement {
               "idle",
               "bar",
               this.text.idleUse,
-              "km/j",
+                    this.text.perDay,
               (bucket) => finiteOrNull(bucket.idle_range_loss_km_per_day),
               selected,
               true,

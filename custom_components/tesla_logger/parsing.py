@@ -97,6 +97,119 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * radius * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _fence_names(fences: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> dict[int, str]:
+    names: dict[int, str] = {}
+    for fence in fences:
+        try:
+            ident = int(fence["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        name = fence.get("name")
+        if isinstance(name, str) and name.strip():
+            names[ident] = name.strip()
+    return names
+
+
+def _fence_id(value: Any, names: dict[int, str]) -> str | None:
+    try:
+        return names.get(int(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _point(row: Mapping[str, Any], latitude: str, longitude: str) -> tuple[float, float] | None:
+    lat = row.get(latitude)
+    lon = row.get(longitude)
+    if isinstance(lat, bool) or isinstance(lon, bool):
+        return None
+    if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+        return float(lat), float(lon)
+    return None
+
+
+def _blank(value: Any) -> bool:
+    return not isinstance(value, str) or not value.strip()
+
+
+def label_drive(
+    drive: Mapping[str, Any],
+    fences: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+) -> dict[str, Any]:
+    """Fill empty place names from geofence ids, then from coordinates.
+
+    tesla-rs stores a reverse-geocoded address, but ``GET /api/v1/drives`` only
+    returns ``start_address_id`` and ``start_geofence_id``. The card reads
+    ``start_address`` and ``end_address``.
+    """
+    labeled = dict(drive)
+    names = _fence_names(fences)
+    if _blank(labeled.get("start_address")):
+        name = _fence_id(labeled.get("start_geofence_id"), names)
+        point = _point(labeled, "start_latitude", "start_longitude")
+        if name is None and point is not None:
+            name = match_geofence(point[0], point[1], fences)
+        if name:
+            labeled["start_address"] = name
+    if _blank(labeled.get("end_address")):
+        name = _fence_id(labeled.get("end_geofence_id"), names)
+        point = _point(labeled, "end_latitude", "end_longitude")
+        if name is None and point is not None:
+            name = match_geofence(point[0], point[1], fences)
+        if name:
+            labeled["end_address"] = name
+    return labeled
+
+
+def label_charge(
+    charge: Mapping[str, Any],
+    fences: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+) -> dict[str, Any]:
+    """Fill an empty charge place from ``geofence_id`` or its coordinates."""
+    labeled = dict(charge)
+    if not _blank(labeled.get("address")) or not _blank(labeled.get("geofence")):
+        return labeled
+    if not _blank(labeled.get("location")):
+        return labeled
+    names = _fence_names(fences)
+    name = _fence_id(labeled.get("geofence_id"), names)
+    point = _point(labeled, "latitude", "longitude")
+    if name is None and point is not None:
+        name = match_geofence(point[0], point[1], fences)
+    if name:
+        labeled["geofence"] = name
+    return labeled
+
+
+def label_drive_page(
+    payload: Mapping[str, Any],
+    fences: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+) -> dict[str, Any]:
+    """Label each drive in a page. A drive detail is a drive with extra keys."""
+    rows = payload.get("data")
+    if isinstance(rows, list):
+        labeled = dict(payload)
+        labeled["data"] = [
+            label_drive(row, fences) if isinstance(row, dict) else row for row in rows
+        ]
+        return labeled
+    return label_drive(payload, fences)
+
+
+def label_charge_page(
+    payload: Mapping[str, Any],
+    fences: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+) -> dict[str, Any]:
+    """Label each charge in a page."""
+    rows = payload.get("data")
+    if isinstance(rows, list):
+        labeled = dict(payload)
+        labeled["data"] = [
+            label_charge(row, fences) if isinstance(row, dict) else row for row in rows
+        ]
+        return labeled
+    return label_charge(payload, fences)
+
+
 def match_geofence(
     latitude: float | None,
     longitude: float | None,

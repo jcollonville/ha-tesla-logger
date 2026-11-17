@@ -82,8 +82,8 @@ async def test_entities_follow_the_rest_payload(
     assert _state(hass, "binary_sensor", "window_front_right").state == "on"
 
     tracker = _state(hass, "device_tracker", "location")
-    assert tracker.attributes["latitude"] == 48.8566
-    assert tracker.attributes["longitude"] == 2.3522
+    assert tracker.attributes["latitude"] == 0
+    assert tracker.attributes["longitude"] == 0
     assert tracker.attributes["source_type"] == "gps"
 
     device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, VIN)})

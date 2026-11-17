@@ -24,6 +24,8 @@ from custom_components.tesla_logger.parsing import (
     binary_value,
     efficiency_wh_per_km,
     exposed_closures,
+    label_charge,
+    label_drive,
     match_geofence,
     sensor_value,
 )
@@ -192,9 +194,19 @@ def test_efficiency_geofence_and_secret_redaction() -> None:
     assert efficiency_wh_per_km({"distance_km": 10, "energy_used_kwh": 1.5}) == 150
     assert efficiency_wh_per_km({"distance_km": 0, "energy_used_kwh": 1}) is None
     assert efficiency_wh_per_km(None) is None
-    fences = [{"name": "Home", "latitude": 48.8566, "longitude": 2.3522, "radius_m": 100}]
-    assert match_geofence(48.8566, 2.3522, fences) == "Home"
-    assert match_geofence(49.0, 2.3522, fences) is None
+    fences = [{"id": 1, "name": "Home", "latitude": 0, "longitude": 0, "radius_m": 100}]
+    assert match_geofence(0, 0, fences) == "Home"
+    assert match_geofence(0, 1, fences) is None
+    named = label_drive(
+        {"start_geofence_id": 1, "end_latitude": 0, "end_longitude": 0},
+        fences,
+    )
+    assert named["start_address"] == "Home"
+    assert named["end_address"] == "Home"
+    kept = label_drive({"start_address": "Depot", "start_geofence_id": 1}, fences)
+    assert kept["start_address"] == "Depot"
+    charge = label_charge({"geofence_id": 1, "latitude": 0, "longitude": 1}, fences)
+    assert charge["geofence"] == "Home"
     data = _data({"last_error": "failed with tl_supersecret"})
     assert sensor_value("last_error", data) == "failed with tl_REDACTED"
     assert "tl_supersecret" not in str(sensor_value("last_error", data))

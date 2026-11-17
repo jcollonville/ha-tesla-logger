@@ -40,6 +40,8 @@ async def test_services_return_history(hass, logger_server, enable_custom_integr
     )
     assert drives["total"] == 1
     assert drives["data"][0]["distance_km"] == 18.4
+    assert drives["data"][0]["start_address"] == "Home"
+    assert "end_address" not in drives["data"][0]
 
     detail = await hass.services.async_call(
         DOMAIN,
@@ -49,6 +51,7 @@ async def test_services_return_history(hass, logger_server, enable_custom_integr
         return_response=True,
     )
     assert len(detail["route"]) == 3
+    assert detail["start_address"] == "Home"
     assert detail["series"][1]["speed_kmh"] == 80
 
     charges = await hass.services.async_call(
@@ -59,6 +62,7 @@ async def test_services_return_history(hass, logger_server, enable_custom_integr
         return_response=True,
     )
     assert charges["data"][0]["energy_added_kwh"] == 6.5
+    assert charges["data"][0]["geofence"] == "Home"
 
     stats = await hass.services.async_call(
         DOMAIN,

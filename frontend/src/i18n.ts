@@ -21,6 +21,7 @@ const EN = {
   fastShare: "fast charging",
   cost: "Cost",
   perKm: "/km",
+  perDay: "km/day",
   idleUse: "Parked consumption",
   tempUse: "Consumption vs temperature",
   battery: "Battery",
@@ -101,7 +102,8 @@ const FR: typeof EN = {
   status: "État",
   drives: "Trajets",
   charges: "Charges",
-  stats: "Stats",
+  stats: "Statistiques",
+  perDay: "km/j",
   charts: "Graphiques",
   consumptionChart: "Consommation",
   chargedChart: "Énergie chargée",
@@ -195,8 +197,10 @@ const FR: typeof EN = {
 
 export type Copy = typeof EN;
 
+/** `hass.locale.language`. French variants use French; everything else is English. */
 export function language(code: string | undefined): Lang {
-  return (code || "").toLowerCase().startsWith("fr") ? "fr" : "en";
+  const normalized = (code || "").toLowerCase().replace("_", "-");
+  return normalized === "fr" || normalized.startsWith("fr-") ? "fr" : "en";
 }
 
 export function copy(lang: Lang): Copy {

@@ -802,6 +802,8 @@ describe("status groups", () => {
       (node) => node.textContent,
     );
     expect(hero).toEqual(["72 %", "328 km"]);
+    expect(card.shadowRoot?.textContent).toContain("Déplacement");
+    expect(card.shadowRoot?.textContent).toContain("Habitacle");
     expect(card.shadowRoot?.querySelector(".ring text")?.textContent).toBe("72%");
     expect(card.shadowRoot?.textContent).not.toContain("Chargeur");
     hass.states["sensor.activity"] = { state: "charging", attributes: { key: "activity", vin: "V" } };
@@ -809,6 +811,20 @@ describe("status groups", () => {
     await card.updateComplete;
     expect(card.shadowRoot?.textContent).toContain("Chargeur");
     expect(card.shadowRoot?.textContent).toContain("11,0 kW");
+  });
+
+  it("falls back to English when the Home Assistant language is not French", async () => {
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    const hass = frenchHass();
+    hass.locale = { language: "de" };
+    card.hass = hass;
+    card.setConfig({ entity: "sensor.tesla_location" });
+    await card.updateComplete;
+    expect(card.shadowRoot?.textContent).toContain("Driving");
+    expect(card.shadowRoot?.textContent).toContain("Cabin");
+    expect(card.shadowRoot?.textContent).not.toContain("Déplacement");
   });
 });
 
@@ -875,7 +891,7 @@ describe("editor schema", () => {
       "État",
       "Trajets",
       "Charges",
-      "Stats",
+      "Statistiques",
       "Graphiques",
     ]);
     form.dispatchEvent(
