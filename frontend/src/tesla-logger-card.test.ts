@@ -169,39 +169,47 @@ describe("history lists", () => {
     expect(list).toBeTruthy();
     const rows = Array.from(list?.querySelectorAll(".entry") ?? []);
     expect(rows).toHaveLength(4);
-    expect(rows[0].querySelector(".entry-main time")?.textContent).toBe("mar. 10 nov., 03:30");
-    expect(rows[0].querySelector(".entry-main time")?.getAttribute("datetime")).toBe(start);
+    expect(list?.getAttribute("data-slots")).toBe("4");
+    expect(rows[0].querySelector("time.entry-when")?.textContent).toBe("mar. 10 nov., 03:30");
+    expect(rows[0].querySelector("time.entry-when")?.getAttribute("datetime")).toBe(start);
     expect(rows[0].querySelector(".entry-figure")?.textContent).toBe("6,5 kWh");
-    expect(metaParts(rows[0])).toEqual(["40 min", "11 kW", "AC"]);
+    expect(chipTexts(rows[0])).toEqual(["40 min", "", "11 kW", "AC"]);
     expect(rows[1].querySelector(".entry-figure")?.textContent).toBe("6,5 kWh");
-    expect(metaParts(rows[1])).toEqual(["40 min", "11 kW"]);
+    expect(chipTexts(rows[1])).toEqual(["40 min", "", "11 kW", ""]);
     expect(rows[2].querySelector(".entry-figure")?.textContent).toBe("1,0 kWh");
-    expect(metaParts(rows[2])).toEqual(["15 min"]);
+    expect(chipTexts(rows[2])).toEqual(["15 min", "", "", ""]);
     expect(rows[3].querySelector(".entry-figure")?.textContent).toBe("—");
-    expect(metaParts(rows[3])).toEqual(["1 min"]);
+    expect(chipTexts(rows[3])).toEqual(["1 min", "", "", ""]);
     expect(list?.textContent).not.toContain("<invalid>");
     expect(list?.textContent?.toLowerCase()).not.toContain("none");
     expect(list?.textContent?.toLowerCase()).not.toContain("null");
     expect(list?.querySelector(".row")).toBeNull();
 
-    const meta = rows[0].querySelector(".entry-meta");
-    expect(meta?.getAttribute("title")).toBe("40 min · 11 kW · AC");
-    const metaStyle = meta ? getComputedStyle(meta) : null;
-    expect(metaStyle?.justifyContent).toBe("space-between");
-    const piece = rows[0].querySelector(".entry-meta > span");
-    const pieceStyle = piece ? getComputedStyle(piece) : null;
-    expect(pieceStyle?.textOverflow).toBe("ellipsis");
-    expect(pieceStyle?.whiteSpace).toBe("nowrap");
-    const mainStyle = getComputedStyle(rows[0].querySelector(".entry-main") as Element);
-    expect(mainStyle.textOverflow).toBe("ellipsis");
-    expect(mainStyle.whiteSpace).toBe("nowrap");
+    const metrics = rows[0].querySelector(".entry-metrics");
+    expect(metrics?.getAttribute("title")).toBe("40 min · 11 kW · AC");
+    const metricsStyle = metrics ? getComputedStyle(metrics) : null;
+    expect(metricsStyle?.display).toBe("grid");
+    expect(metricsStyle?.gridTemplateColumns.split(" ").length).toBe(4);
+    const chipStyle = getComputedStyle(rows[0].querySelector(".chip") as Element);
+    expect(chipStyle.textOverflow).toBe("ellipsis");
+    expect(chipStyle.whiteSpace).toBe("nowrap");
+    expect(chipStyle.textAlign).toBe("right");
+    const whenStyle = getComputedStyle(rows[0].querySelector(".entry-when") as Element);
+    expect(whenStyle.textOverflow).toBe("ellipsis");
+    expect(whenStyle.whiteSpace).toBe("nowrap");
+    expect(whenStyle.fontVariantNumeric).toContain("tabular-nums");
+    const figureStyle = getComputedStyle(rows[0].querySelector(".entry-figure") as Element);
+    expect(figureStyle.fontVariantNumeric).toContain("tabular-nums");
+    expect(Number.parseInt(figureStyle.fontWeight, 10)).toBeGreaterThanOrEqual(700);
     const lineStyle = getComputedStyle(rows[0].querySelector(".entry-line") as Element);
     expect(lineStyle.display).toBe("grid");
     const listStyle = getComputedStyle(list as Element);
+    expect(listStyle.width).toBe("100%");
     expect(["", "none"]).toContain(listStyle.maxWidth);
     const entryStyle = getComputedStyle(rows[0]);
-    expect(parseFloat(entryStyle.paddingTop)).toBeLessThan(10);
+    expect(entryStyle.width).toBe("100%");
     expect(entryStyle.borderBottomStyle).toBe("solid");
+    expect(Number.parseFloat(entryStyle.minHeight)).toBeGreaterThanOrEqual(40);
   });
 
   it("uses a two-line drive row with distance on the right", async () => {
@@ -231,15 +239,25 @@ describe("history lists", () => {
 
     const rows = Array.from(card.shadowRoot?.querySelectorAll("ul.list .entry") ?? []);
     expect(rows).toHaveLength(2);
+    expect(card.shadowRoot?.querySelector("ul.list")?.getAttribute("data-slots")).toBe("3");
     expect(rows[0].tagName).toBe("BUTTON");
-    expect(rows[0].querySelector(".entry-main time")?.textContent).toBe("lun. 9 nov., 08:00");
-    expect(rows[0].querySelector(".entry-main")?.textContent).toBe(
-      "lun. 9 nov., 08:00 · Maison → Bureau",
-    );
+    expect(rows[0].querySelector("time.entry-when")?.textContent).toBe("lun. 9 nov., 08:00");
+    expect(rows[0].querySelector(".entry-place")?.textContent).toBe("Maison→Bureau");
+    expect(
+      Array.from(rows[0].querySelectorAll(".place-point"), (node) => node.textContent),
+    ).toEqual(["Maison", "Bureau"]);
+    expect(rows[0].querySelector("time")?.textContent).not.toContain("Maison");
+    const placeStyle = getComputedStyle(rows[0].querySelector(".entry-place") as Element);
+    expect(placeStyle.textOverflow).toBe("ellipsis");
+    expect(placeStyle.whiteSpace).toBe("nowrap");
     expect(rows[0].querySelector(".entry-figure")?.textContent).toBe("18,4 km");
-    expect(metaParts(rows[0])).toEqual(["30 min", "174 Wh/km", "3,2 kWh"]);
+    expect(chipTexts(rows[0])).toEqual(["30 min", "174 Wh/km", "3,2 kWh"]);
+    expect(rows[1].querySelector(".entry-place")?.textContent).toBe("");
     expect(rows[1].querySelector(".entry-figure")?.textContent).toBe("—");
-    expect(metaParts(rows[1])).toEqual(["10 min", "1,5 kWh"]);
+    expect(chipTexts(rows[1])).toEqual(["10 min", "", "1,5 kWh"]);
+    expect(getComputedStyle(rows[0].querySelector(".entry-metrics") as Element).gridTemplateColumns).toBe(
+      getComputedStyle(rows[1].querySelector(".entry-metrics") as Element).gridTemplateColumns,
+    );
     expect(rows[0].querySelector(".row")).toBeNull();
 
     rows[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -254,8 +272,8 @@ describe("history lists", () => {
   it("puts icon controls on the left and the page range on the right", async () => {
     const card = await showList("charges", {
       page: 2,
-      per_page: 20,
-      total: 45,
+      per_page: 10,
+      total: 25,
       data: [
         {
           id: 9,
@@ -291,16 +309,61 @@ describe("history lists", () => {
     expect(buttons[0]?.hasAttribute("disabled")).toBe(false);
     expect(buttons[1]?.hasAttribute("disabled")).toBe(false);
     expect(buttons[2]?.hasAttribute("disabled")).toBe(false);
-    expect(toolbar?.querySelector(".page-indicator")?.textContent).toBe("21–40");
+    expect(toolbar?.querySelector(".page-indicator")?.textContent).toBe("11–20");
+    const control = buttons[0] ? getComputedStyle(buttons[0]) : null;
+    expect(Number.parseFloat(control?.width ?? "0")).toBeGreaterThanOrEqual(40);
+    expect(Number.parseFloat(control?.height ?? "0")).toBeGreaterThanOrEqual(40);
     expect(card.shadowRoot?.querySelector("time")?.textContent).toBe("Tue, Nov 10, 15:14–15:29");
 
     buttons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect((card as unknown as { _page: number })._page).toBe(3);
   });
+
+  it("requests ten drives and ten charges per page", async () => {
+    const callService = vi.fn().mockImplementation(async (_domain: string, _service: string, data?: { page?: number }) => ({
+      response: {
+        data: [{ id: 1, start_at: "2026-11-16T07:12:00Z", distance_km: 1, energy_added_kwh: 1 }],
+        page: data?.page ?? 1,
+        per_page: 10,
+        total: 30,
+      },
+    }));
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    const hass = frenchHass();
+    hass.callService = callService;
+    card.hass = hass;
+    card.setConfig({ entity: "sensor.tesla_location", default_view: "drives" });
+    await card.updateComplete;
+    await vi.waitFor(() => expect(callService).toHaveBeenCalled());
+    expect(callService.mock.calls[0]?.[1]).toBe("get_drives");
+    expect(callService.mock.calls[0]?.[2]).toEqual({ device_id: "device-1", page: 1, per_page: 10 });
+
+    await vi.waitFor(() => {
+      const next = card.shadowRoot?.querySelectorAll(".list-toolbar ha-icon-button")[1];
+      expect(next?.hasAttribute("disabled")).toBe(false);
+    });
+    card.shadowRoot
+      ?.querySelectorAll(".list-toolbar ha-icon-button")[1]
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await vi.waitFor(() => expect(callService.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(callService.mock.calls[1]?.[2]).toEqual({ device_id: "device-1", page: 2, per_page: 10 });
+
+    const charges = Array.from(card.shadowRoot?.querySelectorAll("[role='tab']") ?? []).find(
+      (tab) => tab.textContent?.trim() === "Charges",
+    );
+    charges?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(callService.mock.calls.some((call) => call[1] === "get_charges")).toBe(true),
+    );
+    const chargeCall = callService.mock.calls.find((call) => call[1] === "get_charges");
+    expect(chargeCall?.[2]).toEqual({ device_id: "device-1", page: 2, per_page: 10 });
+  });
 });
 
-function metaParts(row: Element): Array<string | null> {
-  return Array.from(row.querySelectorAll(".entry-meta > span"), (node) => node.textContent);
+function chipTexts(row: Element): Array<string | null> {
+  return Array.from(row.querySelectorAll(".entry-metrics .chip"), (node) => node.textContent);
 }
 
 function stubHeaderLayout(width: number, height: number): void {

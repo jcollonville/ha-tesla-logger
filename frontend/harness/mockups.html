@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Design mockups</title>
+    <style>
+      :root {
+        font-family: Inter, "Noto Sans", sans-serif;
+        color: #212121;
+        background: #ececec;
+        --primary: #03a9f4;
+        --muted: #727272;
+        --line: rgba(0, 0, 0, 0.12);
+        --chip: #f4f4f5;
+      }
+      body { margin: 0; padding: 24px; }
+      h2 { margin: 28px 0 8px; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; color: #555; }
+      .note { margin: 0 0 10px; color: #555; font-size: 13px; }
+      .card {
+        width: 720px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 2px rgba(0,0,0,.14), 0 1px 5px rgba(0,0,0,.12);
+        overflow: hidden;
+        padding-bottom: 12px;
+      }
+      .card.narrow { width: 390px; }
+      .head { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: center; padding: 16px 16px 8px; }
+      .ring { width: 64px; height: 64px; }
+      .name { margin: 0; font-size: 1.15rem; font-weight: 600; }
+      .sub { margin: 2px 0 0; color: var(--muted); }
+      .pill { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px; background: #f4f4f5; font-size: 0.78rem; }
+      .tabs { display: flex; gap: 2px; padding: 4px 8px 8px; }
+      .tabs button, .seg button, .period button {
+        border: 0; background: transparent; color: var(--muted); font: inherit;
+        min-height: 40px; padding: 8px 10px; border-bottom: 2px solid transparent; cursor: pointer;
+      }
+      .tabs button[aria-selected="true"] { color: #212121; border-bottom-color: var(--primary); }
+      .group { margin: 0 12px 10px; }
+      .group h3 { margin: 0 0 6px; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+      .hero, .tiles { display: grid; gap: 8px; }
+      .hero { grid-template-columns: 1fr 1fr; }
+      .tiles { grid-template-columns: repeat(3, 1fr); }
+      .metric { background: #f4f4f5; border-radius: 12px; padding: 10px 12px; }
+      .metric span { display: block; color: var(--muted); font-size: 0.75rem; }
+      .metric strong { display: block; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+      .seg, .period { display: flex; gap: 6px; padding: 0 12px 8px; }
+      .seg button[aria-pressed="true"], .period button[aria-pressed="true"] {
+        color: #212121; border-bottom-color: var(--primary);
+      }
+      .chart {
+        margin: 0 12px; padding: 8px 10px 4px; border-radius: 12px; background: #f4f4f5;
+      }
+      .chart header, .cap { display: flex; justify-content: space-between; gap: 8px; font-size: 0.92rem; }
+      .chart header strong { font-variant-numeric: tabular-nums; }
+      svg.plot { width: 100%; height: 120px; display: block; }
+      svg.plot polyline { fill: none; stroke: var(--primary); stroke-width: 2; }
+      .fine { margin: 6px 12px 0; color: var(--muted); font-size: 0.78rem; }
+      .back { display: flex; align-items: center; padding: 4px 8px; }
+      .back span { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+      .route { margin: 0 16px 8px; font-weight: 600; }
+      .spark { margin: 8px 12px; }
+      .spark span { color: var(--muted); font-size: 0.78rem; }
+      .spark strong { font-variant-numeric: tabular-nums; }
+      form { display: grid; gap: 10px; padding: 12px 16px 4px; }
+      label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
+      input, select { font: inherit; color: #212121; border: 0; border-bottom: 1px solid #ccc; background: transparent; min-height: 36px; }
+      fieldset { border: 0; margin: 0; padding: 0; }
+      fieldset legend { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+      .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+      .checks label { display: flex; align-items: center; gap: 8px; color: #212121; font-size: 0.9rem; }
+      .day { margin: 8px 16px 0; color: var(--muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+      .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin: 0 16px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+      .row b { font-variant-numeric: tabular-nums; }
+      .row em { grid-column: 1; color: var(--muted); font-style: normal; font-size: 0.8rem; }
+      .badge { font-size: 11px; color: #fff; background: #455a64; display: inline-block; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: 2px; }
+    </style>
+  </head>
+  <body>
+    <h2>Status <span class="badge">Mockup</span></h2>
+    <p class="note">Range stays in Status, beside the battery percentage. The header map is unchanged.</p>
+    <article class="card" id="status">
+      <div class="head">
+        <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
+          <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="3.5"></circle>
+          <circle cx="18" cy="18" r="15.5" fill="none" stroke="#03a9f4" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="72 100" transform="rotate(-90 18 18)"></circle>
+          <text x="18" y="20.5" text-anchor="middle" font-size="8" font-weight="600">72%</text>
+        </svg>
+        <div><p class="name">Red</p><p class="sub">Maison</p><span class="pill">En ligne</span></div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" aria-selected="true">État</button>
+        <button type="button">Trajets</button>
+        <button type="button">Charges</button>
+        <button type="button">Stats</button>
+        <button type="button">Graphiques</button>
+      </div>
+      <section class="group">
+        <div class="hero">
+          <div class="metric"><span>Batterie</span><strong>72 %</strong></div>
+          <div class="metric"><span>Autonomie</span><strong>328 km</strong></div>
+        </div>
+      </section>
+      <section class="group">
+        <h3>Déplacement</h3>
+        <div class="tiles">
+          <div class="metric"><span>Vitesse</span><strong>0 km/h</strong></div>
+          <div class="metric"><span>Puissance</span><strong>−1,2 kW</strong></div>
+          <div class="metric"><span>Odomètre</span><strong>18 420 km</strong></div>
+        </div>
+      </section>
+      <section class="group">
+        <h3>Habitacle</h3>
+        <div class="tiles">
+          <div class="metric"><span>Intérieur</span><strong>21,0 °C</strong></div>
+          <div class="metric"><span>Extérieur</span><strong>8,5 °C</strong></div>
+        </div>
+      </section>
+      <section class="group">
+        <h3>Charge</h3>
+        <div class="tiles">
+          <div class="metric"><span>Chargeur</span><strong>0,0 kW</strong></div>
+          <div class="metric"><span>Ajoutée</span><strong>0,0 kWh</strong></div>
+          <div class="metric"><span>Limite</span><strong>80 %</strong></div>
+        </div>
+      </section>
+    </article>
+
+    <h2>Tabs at 390px <span class="badge">Mockup</span></h2>
+    <p class="note">Same five labels, tighter padding, every tab fully visible.</p>
+    <article class="card narrow" id="tabs">
+      <div class="tabs" role="tablist" style="padding-left:4px;padding-right:4px">
+        <button type="button" style="padding:8px 6px;font-size:0.86rem">État</button>
+        <button type="button" aria-selected="true" style="padding:8px 6px;font-size:0.86rem">Trajets</button>
+        <button type="button" style="padding:8px 6px;font-size:0.86rem">Charges</button>
+        <button type="button" style="padding:8px 6px;font-size:0.86rem">Stats</button>
+        <button type="button" style="padding:8px 6px;font-size:0.86rem">Graphiques</button>
+      </div>
+    </article>
+
+    <h2>Charts <span class="badge">Mockup</span></h2>
+    <p class="note">One chart at a time. The headline is the selected month, and the cost line has a separator.</p>
+    <article class="card" id="charts">
+      <div class="period" role="group">
+        <button type="button">Semaine</button>
+        <button type="button" aria-pressed="true">Mois</button>
+        <button type="button">Année</button>
+      </div>
+      <div class="seg" role="group">
+        <button type="button" aria-pressed="true">Consommation</button>
+        <button type="button">Distance</button>
+        <button type="button">Énergie</button>
+      </div>
+      <figure class="chart">
+        <header><span>Consommation</span><strong>oct. · 176 Wh/km</strong></header>
+        <svg class="plot" viewBox="0 0 320 80" aria-hidden="true">
+          <polyline points="16,48 70,40 124,36 178,50 232,38 286,44"></polyline>
+        </svg>
+        <figcaption class="cap"><span>juin</span><span>juil.</span><span>août</span><span>sept.</span><span>oct.</span><span>nov.</span></figcaption>
+      </figure>
+      <p class="fine">nov. est sélectionné · 39 % recharge rapide · Coût 34,25 · 0,13 /km</p>
+    </article>
+
+    <h2>Drive detail <span class="badge">Mockup</span></h2>
+    <p class="note">Icon back button stays. The route is named, and the sparkline has a scale.</p>
+    <article class="card" id="detail">
+      <div class="back">
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+        <b style="margin-left:4px">Retour</b>
+        <span>dim. 15 nov., 09:02</span>
+      </div>
+      <p class="route">Maison → Entrepôt nord, quai B</p>
+      <div class="hero" style="margin:0 12px 8px">
+        <div class="metric"><span>Distance</span><strong>142,6 km</strong></div>
+        <div class="metric"><span>Durée</span><strong>2 h 16 min</strong></div>
+      </div>
+      <div class="spark">
+        <span>Vitesse</span> <strong>0–90 km/h</strong>
+        <svg class="plot" viewBox="0 0 320 72" aria-hidden="true" style="height:88px">
+          <polyline points="8,60 40,48 80,28 120,22 160,20 200,36 240,50 280,62 312,64"></polyline>
+        </svg>
+      </div>
+    </article>
+
+    <h2>Editor <span class="badge">Mockup</span></h2>
+    <p class="note">Default-view choices follow the Home Assistant language. Toggles are grouped.</p>
+    <article class="card" id="editor">
+      <form>
+        <label>Entité<input value="sensor.tesla_location" readonly /></label>
+        <label>Carte<select><option>Affichée</option></select></label>
+        <label>Vue par défaut
+          <select><option>Trajets</option><option>État</option><option>Charges</option><option>Stats</option><option>Graphiques</option></select>
+        </label>
+        <fieldset>
+          <legend>Vues</legend>
+          <div class="checks">
+            <label><input type="checkbox" checked /> État</label>
+            <label><input type="checkbox" checked /> Trajets</label>
+            <label><input type="checkbox" checked /> Charges</label>
+            <label><input type="checkbox" checked /> Totaux</label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Graphiques</legend>
+          <div class="checks">
+            <label><input type="checkbox" checked /> Consommation</label>
+            <label><input type="checkbox" checked /> Distance</label>
+            <label><input type="checkbox" checked /> Énergie chargée</label>
+            <label><input type="checkbox" checked /> Santé batterie</label>
+          </div>
+        </fieldset>
+      </form>
+    </article>
+
+    <h2>Day groups <span class="badge">Mockup</span></h2>
+    <p class="note">Optional follow-up. The row layout from 0.1.12 stays; days become headings.</p>
+    <article class="card" id="days">
+      <p class="day">lun. 16 nov.</p>
+      <div class="row"><b>07:12–07:46</b><b>28,4 km</b><em>Maison → Bureau</em></div>
+      <div class="row"><b>17:05–17:48</b><b>31,2 km</b><em>Bureau → Maison</em></div>
+      <p class="day">dim. 15 nov.</p>
+      <div class="row"><b>09:02–11:18</b><b>142,6 km</b><em>Maison → Entrepôt nord</em></div>
+    </article>
+  </body>
+</html>
