@@ -156,11 +156,20 @@ export interface HistoryRowModel {
   datetime: string;
   when: string;
   place: string | null;
+  /** Both ends of a drive, so each can ellipsize on its own. */
+  ends: readonly [string, string] | null;
   figure: string | null;
   /** Joined detail, used as the row title. */
   detail: string;
-  /** Pieces spread across the second line. */
+  /** Present secondary values, in column order. */
   details: string[];
+  /**
+   * Fixed secondary columns. A null keeps that column so values line up
+   * when a drive or charge is missing one of them.
+   * Drives: duration, Wh/km, state of charge or energy.
+   * Charges: duration, state of charge, power, AC/DC.
+   */
+  slots: Array<string | null>;
 }
 
 function present(parts: Array<string | null | undefined>): string[] {
@@ -237,19 +246,22 @@ export function driveHistory(drive: Drive, prefs: Lang | DatePrefs): HistoryRowM
   const place = start && end ? `${start} → ${end}` : start || end;
   const efficiency = whPerKm(drive.energy_used_kwh, drive.distance_km);
   const soc = socRange(drive.start_battery_level, drive.end_battery_level, lang);
-  const details = present([
+  const slots = [
     finite(drive.duration_s) == null ? null : formatDuration(drive.duration_s),
     efficiency == null ? null : `${formatNumber(efficiency, 0, lang)} Wh/km`,
     soc ?? kwh(drive.energy_used_kwh, lang),
-  ]);
+  ];
+  const details = present(slots);
   const distance = finite(drive.distance_km);
   return {
     datetime: drive.start_at,
     when: formatListRange(drive.start_at, drive.end_at, resolved),
     place,
+    ends: start && end ? [start, end] : null,
     figure: distance == null ? null : `${formatNumber(distance, 1, lang)} km`,
     detail: details.join(" · "),
     details,
+    slots,
   };
 }
 
@@ -272,19 +284,22 @@ export function chargeHistory(charge: Charge, prefs: Lang | DatePrefs): HistoryR
   const type = displayChargerType(charge.charger_type);
   const descriptive = type && type !== "AC" && type !== "DC" ? type : null;
   const power = finite(charge.max_power_kw);
-  const details = present([
+  const slots = [
     finite(charge.duration_s) == null ? null : formatDuration(charge.duration_s),
     socRange(charge.start_battery_level, charge.end_battery_level, lang),
     power == null ? null : `${formatNumber(power, 0, lang)} kW`,
     chargeKind(charge),
-  ]);
+  ];
+  const details = present(slots);
   return {
     datetime: charge.start_at,
     when: formatListRange(charge.start_at, charge.end_at, resolved),
     place: named || descriptive,
+    ends: null,
     figure: kwh(charge.energy_added_kwh, lang),
     detail: details.join(" · "),
     details,
+    slots,
   };
 }
 

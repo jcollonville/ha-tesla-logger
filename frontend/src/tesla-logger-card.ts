@@ -83,6 +83,9 @@ function finiteOrNull(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/** Drives and charges requested for one list page. */
+const HISTORY_PAGE_SIZE = 10;
+
 export class TeslaLoggerCard extends LitElement {
   static properties = {
     hass: { attribute: false },
@@ -293,13 +296,14 @@ export class TeslaLoggerCard extends LitElement {
       .entry {
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 4px;
         box-sizing: border-box;
         width: 100%;
         min-width: 0;
         max-width: 100%;
+        min-height: 44px;
         margin: 0;
-        padding: 7px 4px;
+        padding: 10px 2px;
         border: 0;
         border-bottom: 1px solid var(--divider-color, rgba(127, 127, 127, 0.35));
         border-radius: 0;
@@ -310,32 +314,92 @@ export class TeslaLoggerCard extends LitElement {
       .entry-line {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
-        column-gap: 12px;
-        align-items: baseline;
+        column-gap: 10px;
+        align-items: center;
         min-width: 0;
+        max-width: 100%;
       }
-      .entry-main {
+      .entry-when {
         min-width: 0;
         overflow: hidden;
         color: var(--primary-text-color, #212121);
-        font-size: 0.92rem;
+        font-size: 0.95rem;
         font-weight: 600;
+        font-variant-numeric: tabular-nums;
         line-height: 1.25;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .entry-figure {
         color: var(--primary-text-color, #212121);
-        font-size: 0.92rem;
+        font-size: 1.05rem;
         font-weight: 700;
         font-variant-numeric: tabular-nums;
         line-height: 1.25;
+        text-align: right;
         white-space: nowrap;
+      }
+      .entry-place {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        color: var(--secondary-text-color, #727272);
+        font-size: 0.8rem;
+        font-weight: 500;
+        line-height: 1.3;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .entry-place.route {
+        display: flex;
+        align-items: baseline;
+        gap: 0.35em;
+      }
+      .place-point {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .place-join {
+        flex: none;
+      }
+      .entry-metrics {
+        display: grid;
+        align-items: center;
+        justify-content: end;
+        min-width: 0;
+        column-gap: 6px;
+        color: var(--primary-text-color, #212121);
+        font-size: 0.72rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.2;
+      }
+      .list[data-slots="3"] .entry-metrics {
+        grid-template-columns: 12ch 12ch 13ch;
+      }
+      .list[data-slots="4"] .entry-metrics {
+        grid-template-columns: 12ch 13ch 8ch 4.5ch;
+      }
+      .chip {
+        min-width: 0;
+        overflow: hidden;
+        text-align: right;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chip:not(:empty) {
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--primary-text-color, #212121) 8%, transparent);
       }
       button.entry {
         font: inherit;
-        min-height: 0;
-        border-bottom: 0;
+        width: 100%;
+        min-height: 44px;
+        border-bottom: 1px solid var(--divider-color, rgba(127, 127, 127, 0.35));
         cursor: pointer;
       }
       button.entry:hover {
@@ -345,28 +409,10 @@ export class TeslaLoggerCard extends LitElement {
           var(--secondary-background-color, transparent)
         );
       }
-      button.entry:focus-visible {
+      button.entry:focus-visible,
+      ha-icon-button:focus-visible {
         outline: 2px solid var(--primary-color, #03a9f4);
         outline-offset: 2px;
-      }
-      .entry-meta {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 12px;
-        min-width: 0;
-        max-width: 100%;
-        overflow: hidden;
-        color: var(--secondary-text-color);
-        font-size: 0.75rem;
-        font-weight: 400;
-        line-height: 1.3;
-      }
-      .entry-meta > span {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
       .map {
         height: 220px;
@@ -578,10 +624,10 @@ export class TeslaLoggerCard extends LitElement {
         white-space: nowrap;
       }
       ha-icon-button {
-        width: 36px;
-        height: 36px;
-        --mdc-icon-button-size: 36px;
-        --mdc-icon-size: 20px;
+        width: 40px;
+        height: 40px;
+        --mdc-icon-button-size: 40px;
+        --mdc-icon-size: 22px;
         color: var(--primary-text-color);
       }
       ha-icon-button[disabled] {
@@ -606,7 +652,34 @@ export class TeslaLoggerCard extends LitElement {
           padding: 0 8px 4px;
         }
         .entry {
-          padding: 6px 2px;
+          padding: 10px 0;
+        }
+        .entry-when {
+          font-size: 0.84rem;
+        }
+        .entry-figure {
+          font-size: 0.98rem;
+        }
+        .entry-secondary {
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          row-gap: 3px;
+        }
+        .entry-metrics {
+          width: 100%;
+          font-size: 0.7rem;
+        }
+        .chip:not(:empty) {
+          padding: 1px 2px;
+        }
+        .list[data-slots="3"] .entry-metrics {
+          column-gap: 4px;
+          grid-template-columns: 12ch 13ch 13ch;
+        }
+        .list[data-slots="4"] .entry-metrics {
+          column-gap: 4px;
+          grid-template-columns: 12ch 13ch 8ch 4.5ch;
         }
         .totals-row {
           gap: 4px;
@@ -1024,7 +1097,7 @@ export class TeslaLoggerCard extends LitElement {
     const page = this._drives;
     return html`
       ${this.listToolbar(page)}
-      <ul class="list">
+      <ul class="list" data-slots="3">
         ${(page?.data || []).map((drive) =>
           this.historyRow(driveHistory(drive, this.dates), () => this.openDrive(drive.id)),
         )}
@@ -1073,7 +1146,7 @@ export class TeslaLoggerCard extends LitElement {
     const page = this._charges;
     return html`
       ${this.listToolbar(page)}
-      <ul class="list">
+      <ul class="list" data-slots="4">
         ${(page?.data || []).map((charge) =>
           this.historyRow(chargeHistory(charge, this.dates)),
         )}
@@ -1463,18 +1536,27 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   private historyRow(row: HistoryRowModel, onOpen?: () => void) {
-    const main = row.place ? `${row.when} · ${row.place}` : row.when;
     const body = html`<span class="entry-line"
-        ><span class="entry-main" title=${main}
-          ><time datetime=${row.datetime}>${row.when}</time>${row.place
-            ? ` · ${row.place}`
-            : nothing}</span
+        ><time class="entry-when" datetime=${row.datetime} title=${row.when}>${row.when}</time
         ><strong class="entry-figure">${row.figure ?? "—"}</strong></span
-      >${row.details.length
-        ? html`<span class="entry-meta" title=${row.detail}
-            >${row.details.map((part) => html`<span>${part}</span>`)}</span
-          >`
-        : nothing}`;
+      ><span class="entry-line entry-secondary"
+        ><span
+          class=${row.ends ? "entry-place route" : "entry-place"}
+          title=${row.place ?? ""}
+          aria-label=${row.place ?? nothing}
+          >${row.ends
+            ? html`<span class="place-point">${row.ends[0]}</span
+                ><span class="place-join" aria-hidden="true">→</span
+                ><span class="place-point">${row.ends[1]}</span>`
+            : (row.place ?? "")}</span
+        ><span class="entry-metrics" title=${row.detail}
+          >${row.slots.map((part) =>
+            part
+              ? html`<span class="chip">${part}</span>`
+              : html`<span class="chip" aria-hidden="true"></span>`,
+          )}</span
+        ></span
+      >`;
     if (onOpen) {
       return html`
         <li>
@@ -1559,7 +1641,7 @@ export class TeslaLoggerCard extends LitElement {
 
   private async loadDrives(): Promise<void> {
     await this.load("drives", async () => {
-      const payload = await this.call("get_drives", { page: this._page, per_page: 20 });
+      const payload = await this.call("get_drives", { page: this._page, per_page: HISTORY_PAGE_SIZE });
       if (!isPage<Drive>(payload)) {
         throw new Error(this.text.failed);
       }
@@ -1569,7 +1651,7 @@ export class TeslaLoggerCard extends LitElement {
 
   private async loadCharges(): Promise<void> {
     await this.load("charges", async () => {
-      const payload = await this.call("get_charges", { page: this._page, per_page: 20 });
+      const payload = await this.call("get_charges", { page: this._page, per_page: HISTORY_PAGE_SIZE });
       if (!isPage<Charge>(payload)) {
         throw new Error(this.text.failed);
       }

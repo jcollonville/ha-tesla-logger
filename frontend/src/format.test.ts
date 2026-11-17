@@ -118,7 +118,9 @@ describe("history rows", () => {
     );
     expect(row.when).toBe("lun. 9 nov., 08:00–08:30");
     expect(row.details).toEqual(["30 min", "174 Wh/km", "70 → 64 %"]);
+    expect(row.slots).toEqual(["30 min", "174 Wh/km", "70 → 64 %"]);
     expect(row.place).toBe("Maison → Bureau");
+    expect(row.ends).toEqual(["Maison", "Bureau"]);
     expect(row.figure).toBe("18,4 km");
     expect(row.detail).toBe("30 min · 174 Wh/km · 70 → 64 %");
     const fallback = driveHistory(
@@ -126,8 +128,10 @@ describe("history rows", () => {
       "fr",
     );
     expect(fallback.place).toBeNull();
+    expect(fallback.ends).toBeNull();
     expect(fallback.figure).toBeNull();
     expect(fallback.detail).toBe("10 min · 1,5 kWh");
+    expect(fallback.slots).toEqual(["10 min", null, "1,5 kWh"]);
   });
 
   it("puts charge energy on the figure and keeps AC/DC with the secondary line", () => {
@@ -149,6 +153,7 @@ describe("history rows", () => {
     expect(row.place).toBe("Maison");
     expect(row.figure).toBe("6,5 kWh");
     expect(row.detail).toBe("40 min · 20 → 55 % · 11 kW · AC");
+    expect(row.slots).toEqual(["40 min", "20 → 55 %", "11 kW", "AC"]);
     const named = chargeHistory(
       {
         id: 2,
@@ -163,6 +168,7 @@ describe("history rows", () => {
     );
     expect(named.place).toBe("Supercharger");
     expect(named.detail).toBe("15 min · 120 kW · DC");
+    expect(named.slots).toEqual(["15 min", null, "120 kW", "DC"]);
     expect(
       chargeHistory({ id: 3, start_at: start, charger_type: "<invalid>" }, "fr").place,
     ).toBeNull();
