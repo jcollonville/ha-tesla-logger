@@ -2,12 +2,35 @@
 
 from __future__ import annotations
 
+import struct
+import zlib
 from typing import Any
 
 from aiohttp import web
 
 TOKEN = "tl_testtoken"
 VIN = "5YJTEST0000000001"
+
+
+def placeholder_png(color: tuple[int, int, int] = (20, 90, 180)) -> bytes:
+    """Return a 2x2 PNG generated here. It is not Tesla artwork."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    raw = b"".join(b"\x00" + bytes(color) * 2 for _ in range(2))
+    header = struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
 
 
 class FakeState:
@@ -27,6 +50,10 @@ class FakeState:
         self.battery_level = 55.0
         self.ws_battery_level = 80.0
         self.last_error: str | None = "token tl_shouldnotleak failed"
+        self.car_png: bytes | None = None
+        self.car_etag = '"render-1"'
+        self.car_down = False
+        self.car_requests: list[dict[str, str | None]] = []
 
     def vehicle(self) -> dict[str, Any]:
         return {
@@ -318,6 +345,23 @@ def make_app(state: FakeState) -> web.Application:
             }
         )
 
+    async def car_png(request: web.Request) -> web.Response:
+        _auth(request)
+        state.car_requests.append(
+            {
+                "id": request.match_info["id"],
+                "if_none_match": request.headers.get("If-None-Match"),
+            }
+        )
+        if state.car_down:
+            return web.Response(status=503)
+        if state.car_png is None:
+            return web.Response(status=404)
+        headers = {"ETag": state.car_etag, "Cache-Control": "public, max-age=86400"}
+        if request.headers.get("If-None-Match") == state.car_etag:
+            return web.Response(status=304, headers=headers)
+        return web.Response(body=state.car_png, content_type="image/png", headers=headers)
+
     async def geofences(request: web.Request) -> web.Response:
         _auth(request)
         return web.json_response(
@@ -367,6 +411,7 @@ def make_app(state: FakeState) -> web.Application:
     app.on_shutdown.append(_shutdown)
     app.router.add_get("/api/v1/vehicles", vehicles)
     app.router.add_get("/api/v1/vehicles/{id}/state", vehicle_state)
+    app.router.add_get("/api/v1/vehicles/{id}/car.png", car_png)
     app.router.add_get("/api/v1/drives", drives)
     app.router.add_get("/api/v1/drives/{id}", drive)
     app.router.add_get("/api/v1/charges", charges)

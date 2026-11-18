@@ -1,16 +1,21 @@
 import { LitElement, css, html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
-import { activityLabel, copy, language, type Copy, type Lang } from "./i18n";
+import { TeslaLoggerCardEditor } from "./card-editor";
+import { carDrawing } from "./car-art";
+import { carImageTarget, officialImageEnabled, signedCarImageUrl } from "./car-image";
 import {
+  brushSpan,
   bucketLabel,
   currentBucketIndex,
   previousDistanceKm,
   SERIES_COUNT,
   seriesChart,
-  seriesValues,
-  sparkline,
+  slotBand,
+  slotIndex,
   type ChartPoint,
 } from "./charts";
+import { chargeDetailFlags, driveDetailFlags, pageSize } from "./detail-config";
+import { activityLabel, copy, language, type Copy, type Lang } from "./i18n";
 import {
   asRecord,
   bucketInPeriod,
@@ -22,25 +27,26 @@ import {
   formatNumber,
   periodRange,
   safeError,
+  socRange,
+  chargeSupply,
   whPerKm,
   type HistoryRowModel,
 } from "./format";
 import { readPosition, tilesForView } from "./mini-map";
 import {
-  SHOW_DEFAULTS,
-  CHART_SHOW_KEYS,
   chartsVisible,
   fallbackView,
   seriesNeeded,
   showFlags,
-  VIEW_SHOW_KEYS,
   visibleViews,
 } from "./show-config";
+import { stubConfig } from "./stub";
 import type {
   CardConfig,
   Charge,
   Drive,
   DriveDetail,
+  SeriesPoint,
   HassEntity,
   HomeAssistant,
   Page,
@@ -85,9 +91,6 @@ function finiteOrNull(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** Drives and charges requested for one list page. */
-const HISTORY_PAGE_SIZE = 10;
-
 export class TeslaLoggerCard extends LitElement {
   static properties = {
     hass: { attribute: false },
@@ -111,6 +114,11 @@ export class TeslaLoggerCard extends LitElement {
     _previousKm: { state: true },
     _narrow: { state: true },
     _tabsOverflow: { state: true },
+    _hover: { state: true },
+    _zoom: { state: true },
+    _brush: { state: true },
+    _carImageUrl: { state: true },
+    _carImageFailed: { state: true },
   };
 
   hass?: HomeAssistant;
@@ -136,8 +144,18 @@ export class TeslaLoggerCard extends LitElement {
   private _previousKm: number | null = null;
   private _narrow = false;
   private _tabsOverflow = false;
+  private _hover: number | null = null;
+  private _zoom: { start: number; end: number } | null = null;
+  private _brush: { start: number; end: number } | null = null;
+  private _dragAnchor: number | null = null;
+  private _eatClick = false;
+  private _chargeId?: number;
   private _resize?: ResizeObserver;
   private _onScreen?: IntersectionObserver;
+  private _carImageUrl = "";
+  private _carImageFailed = false;
+  private _carImageKey = "";
+  private _carImageGen = 0;
   private routeMap?: { element: HTMLDivElement; destroy(): void };
   private mapToken = 0;
   private mapModule?: Promise<typeof import("./leaflet-map")>;
@@ -145,6 +163,22 @@ export class TeslaLoggerCard extends LitElement {
   static styles = css`
       :host {
         display: block;
+        --tl-text: var(--primary-text-color, #171a20);
+        --tl-muted: var(--secondary-text-color, #5c5e62);
+        --tl-surface: var(--card-background-color, var(--ha-card-background, #fff));
+        --tl-surface-2: var(--secondary-background-color, #f4f4f4);
+        --tl-line: var(--divider-color, rgba(23, 26, 32, 0.12));
+        --tl-accent: var(--primary-color, #3e6ae1);
+        --tl-green: var(--success-color, #1d9b52);
+        --tl-radius: 14px;
+        color: var(--tl-text);
+        font-family: var(
+          --ha-card-font-family,
+          var(--ha-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif)
+        );
+      }
+      ha-card.dark {
+        --tl-green: var(--success-color, #4fd17c);
       }
       ha-card {
         padding-bottom: 8px;
@@ -153,14 +187,18 @@ export class TeslaLoggerCard extends LitElement {
         position: relative;
         overflow: hidden;
       }
+      .map-band {
+        position: relative;
+        min-height: 84px;
+        overflow: hidden;
+      }
       .header {
         position: relative;
         z-index: 1;
-        display: grid;
-        grid-template-columns: 72px 1fr;
-        gap: 12px;
-        align-items: center;
-        padding: 16px 16px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 16px 16px 12px;
       }
       .map-bg {
         position: absolute;
@@ -226,24 +264,74 @@ export class TeslaLoggerCard extends LitElement {
       }
       .name {
         margin: 0;
-        font-size: 1.15rem;
-        font-weight: 600;
-        color: var(--primary-text-color);
+        font-size: 1.35rem;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        color: var(--tl-text);
       }
       .sub {
         margin: 2px 0 0;
-        color: var(--secondary-text-color);
+        color: var(--tl-muted);
         font-size: 0.92rem;
       }
+      .hero-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .car-stage {
+        margin: 8px -8px 0;
+      }
+      svg.car {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 400 / 160;
+      }
+      img.car {
+        display: block;
+        width: min(100%, 560px);
+        max-height: 240px;
+        margin: 0 auto;
+        object-fit: contain;
+        object-position: center bottom;
+      }
+      .car-floor {
+        opacity: 0.85;
+      }
+      ha-card.dark .car-floor {
+        opacity: 1;
+      }
+      .map-only-spacer {
+        height: 72px;
+      }
       .pill {
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         margin-top: 6px;
-        padding: 2px 8px;
+        padding: 2px 10px;
         border-radius: 999px;
-        background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
-        color: var(--primary-text-color);
+        background: var(--tl-surface-2);
+        color: var(--tl-text);
         font-size: 0.78rem;
+        font-weight: 500;
         letter-spacing: 0.02em;
+      }
+      .pill.drive {
+        background: color-mix(in srgb, var(--tl-accent) 14%, transparent);
+        color: var(--tl-accent);
+      }
+      .pill.charge {
+        background: color-mix(in srgb, var(--tl-green) 16%, transparent);
+        color: var(--tl-green);
+      }
+      .pill .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
       }
       .tabbar {
         position: relative;
@@ -262,25 +350,52 @@ export class TeslaLoggerCard extends LitElement {
           var(--card-background-color, var(--ha-card-background, #fff))
         );
       }
-      .tabs, .periods, .pager {
+      .tabs, .periods {
         display: flex;
-        gap: 6px;
+        flex-wrap: nowrap;
+        gap: 4px;
+        width: max-content;
+        max-width: calc(100% - 24px);
+        margin: 0 12px 12px;
+        padding: 4px;
         overflow-x: auto;
-        padding: 4px 12px 8px;
+        scrollbar-width: none;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--tl-text) 8%, var(--tl-surface));
       }
-      button {
+      .tabs button, .periods button, .chart-switch button, button.zoom-reset {
         border: 0;
+        border-bottom: 0;
+        border-radius: 999px;
         background: transparent;
-        color: var(--secondary-text-color);
+        color: var(--tl-muted);
         font: inherit;
-        min-height: 40px;
-        padding: 8px 10px;
-        border-bottom: 2px solid transparent;
+        font-size: 0.875rem;
+        font-weight: 500;
+        min-height: 36px;
+        padding: 0 14px;
+        white-space: nowrap;
         cursor: pointer;
       }
-      button[aria-selected="true"], button.active {
-        color: var(--primary-text-color);
-        border-bottom-color: var(--primary-color, #03a9f4);
+      .tabs button[aria-selected="true"], .periods button[aria-pressed="true"], .chart-switch button[aria-pressed="true"] {
+        background: var(--tl-surface);
+        color: var(--tl-text);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      }
+      .chart-switch {
+        display: flex;
+        gap: 4px;
+        width: max-content;
+        max-width: calc(100% - 24px);
+        margin: 0 12px 8px;
+        padding: 3px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--tl-text) 8%, var(--tl-surface));
+      }
+      button.zoom-reset {
+        margin: 0 12px 8px;
+        background: var(--tl-surface-2);
+        color: var(--tl-text);
       }
       .grid {
         display: grid;
@@ -355,13 +470,16 @@ export class TeslaLoggerCard extends LitElement {
         font-weight: 700;
         line-height: 1.2;
       }
+      .day-group {
+        margin: 0 12px 12px;
+      }
       .day-heading {
-        margin: 10px 12px 0;
-        color: var(--secondary-text-color);
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        margin: 0 4px 8px;
+        color: var(--tl-text);
+        font-size: 1rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        text-transform: none;
       }
       .route-name {
         margin: 0 16px 8px;
@@ -394,8 +512,12 @@ export class TeslaLoggerCard extends LitElement {
         box-sizing: border-box;
         width: 100%;
         margin: 0;
-        padding: 0 12px 4px;
+        padding: 0;
+        overflow: hidden;
         list-style: none;
+        border: 1px solid var(--tl-line);
+        border-radius: var(--tl-radius);
+        background: var(--tl-surface);
       }
       .entry {
         display: flex;
@@ -417,11 +539,16 @@ export class TeslaLoggerCard extends LitElement {
       }
       .entry-line {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        column-gap: 10px;
-        align-items: center;
+        grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+        column-gap: 12px;
+        align-items: start;
         min-width: 0;
         max-width: 100%;
+      }
+      .entry-secondary {
+        display: block;
+        margin-top: 4px;
+        padding-left: calc(8.5rem + 12px);
       }
       .entry-when {
         min-width: 0;
@@ -455,9 +582,47 @@ export class TeslaLoggerCard extends LitElement {
         white-space: nowrap;
       }
       .entry-place.route {
+        position: relative;
         display: flex;
-        align-items: baseline;
-        gap: 0.35em;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+      }
+      .entry-place.route::before {
+        content: "";
+        position: absolute;
+        left: 3.25px;
+        top: 0.55em;
+        bottom: 0.55em;
+        width: 1.5px;
+        background: var(--tl-line);
+      }
+      .place-point {
+        position: relative;
+        padding-left: 16px;
+      }
+      .place-point::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.45em;
+        width: 8px;
+        height: 8px;
+        box-sizing: border-box;
+        border-radius: 50%;
+        border: 2px solid var(--tl-muted);
+        background: var(--tl-surface);
+      }
+      .place-point:last-child::before {
+        border: 0;
+        background: var(--tl-accent);
+      }
+      .place-join {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
       }
       .place-point {
         flex: 0 1 auto;
@@ -486,6 +651,9 @@ export class TeslaLoggerCard extends LitElement {
       }
       .list[data-slots="4"] .entry-metrics {
         grid-template-columns: 12ch 13ch 8ch 4.5ch;
+      }
+      .list[data-slots="4"] .entry-figure {
+        color: var(--tl-green);
       }
       .chip {
         min-width: 0;
@@ -575,8 +743,48 @@ export class TeslaLoggerCard extends LitElement {
         display: block;
       }
       .series-chart .grid {
-        stroke: var(--divider-color, rgba(127, 127, 127, 0.45));
+        stroke: var(--tl-line);
         stroke-width: 1;
+      }
+      .series-chart .crosshair {
+        stroke: var(--tl-muted);
+        stroke-width: 1;
+        stroke-dasharray: 3 3;
+        pointer-events: none;
+      }
+      .plot {
+        position: relative;
+        touch-action: pan-y;
+        user-select: none;
+      }
+      .brush {
+        position: absolute;
+        top: 12px;
+        bottom: 28px;
+        background: color-mix(in srgb, var(--tl-accent) 16%, transparent);
+        pointer-events: none;
+      }
+      .chart-tooltip {
+        position: absolute;
+        z-index: 3;
+        min-width: 8rem;
+        padding: 8px 10px;
+        border: 1px solid var(--tl-line);
+        border-radius: 10px;
+        background: var(--tl-surface);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        color: var(--tl-text);
+        font-size: 0.8125rem;
+        line-height: 1.35;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      .chart-tooltip .tip-head {
+        margin-bottom: 4px;
+        color: var(--tl-muted);
+      }
+      .chart-stage {
+        position: relative;
       }
       .series-chart g[role="button"] {
         cursor: pointer;
@@ -748,9 +956,6 @@ export class TeslaLoggerCard extends LitElement {
         font-weight: 600;
       }
       @media (max-width: 420px) {
-        .header {
-          grid-template-columns: 64px 1fr;
-        }
         .tabs {
           gap: 0;
           padding: 4px 4px 8px;
@@ -766,7 +971,14 @@ export class TeslaLoggerCard extends LitElement {
         }
         .list {
           gap: 0;
-          padding: 0 8px 4px;
+          padding: 0;
+        }
+        .entry-line {
+          grid-template-columns: 6.6rem minmax(0, 1fr) auto;
+          column-gap: 8px;
+        }
+        .entry-secondary {
+          padding-left: calc(6.6rem + 8px);
         }
         .entry {
           padding: 10px 0;
@@ -815,10 +1027,15 @@ export class TeslaLoggerCard extends LitElement {
       throw new Error("Please select a Tesla Logger entity");
     }
     const changed = this._config?.entity !== config.entity;
+    const pageChanged = this._config != null && pageSize(this._config) !== pageSize(config);
     this._config = config;
     if (changed) {
       this._view = config.default_view || "status";
       this.clearHistory();
+    } else if (pageChanged) {
+      this._page = 1;
+      this._drives = undefined;
+      this._charges = undefined;
     }
     this.ensureVisibleView();
   }
@@ -839,10 +1056,7 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   static getStubConfig(hass: HomeAssistant): CardConfig {
-    const entity =
-      Object.keys(hass.states).find((id) => hass.states[id]?.attributes?.key === "location") ||
-      "";
-    return { entity, show: { ...SHOW_DEFAULTS } };
+    return stubConfig(hass);
   }
 
   getCardSize(): number {
@@ -971,14 +1185,18 @@ export class TeslaLoggerCard extends LitElement {
     if (this.shouldLoadMapChunk()) {
       void this.loadMapModule().catch(() => undefined);
     }
+    if (changed.has("hass") || changed.has("_config")) {
+      void this.ensureCarImage();
+    }
   }
 
   override render() {
     if (!this._config?.entity) {
       return html`<ha-card><p class="message">${this.text.pick}</p></ha-card>`;
     }
+    const dark = Boolean(this.hass?.themes?.darkMode);
     return html`
-      <ha-card>
+      <ha-card class=${dark ? "dark" : ""}>
         ${this.header()}
         <div class=${this._tabsOverflow ? "tabbar overflow" : "tabbar"}>
           <div class="tabs" role="tablist" data-tabs ${ref(this.watchSize)}>
@@ -1056,42 +1274,107 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   private header() {
-    const battery = this.numeric("battery_level");
-    const shown = battery == null ? "—" : `${Math.round(battery)}%`;
-    const dash = battery == null ? 0 : Math.max(0, Math.min(100, battery));
+    const showCar = this.flags.car;
+    const showMap = this.mapEnabled();
+    if (!showCar && !showMap) {
+      return nothing;
+    }
     const activity = this.label("activity") || "";
     const deviceName = this.deviceId ? this.hass?.devices?.[this.deviceId]?.name : undefined;
+    const model = this.deviceId ? this.hass?.devices?.[this.deviceId]?.model : undefined;
     const friendly = this.hass?.states[this._config?.entity || ""]?.attributes.friendly_name;
     const name = deviceName || (typeof friendly === "string" ? friendly : this.text.unknown);
     const fence = this.label("geofence");
-    return html`
-      <div class="header-wrap" data-map-host ${ref(this.watchSize)}>
-        ${this.watermark()}
-        <div class="header">
-          <svg class="ring" viewBox="0 0 36 36" aria-label=${shown}>
-            <circle class="track" cx="18" cy="18" r="15.5"></circle>
-            <circle
-              class="value"
-              cx="18"
-              cy="18"
-              r="15.5"
-              pathLength="100"
-              stroke-dasharray="${dash} 100"
-            ></circle>
-            <text x="18" y="20">${shown}</text>
-          </svg>
+    const tone = activityTone(activity);
+    const identity = html`
+      <div class="header">
+        <div class="hero-head">
           <div>
             <p class="name">${name}</p>
             ${fence ? html`<p class="sub">${fence}</p>` : nothing}
-            <span class="pill">${activityLabel(this.text, activity)}</span>
           </div>
+          <span class=${`pill ${tone}`}>
+            <span class="status-dot" aria-hidden="true"></span>
+            ${activityLabel(this.text, activity)}
+          </span>
         </div>
+      </div>
+    `;
+    return html`
+      <div class="header-wrap">
+        <div class="map-band" data-map-host ${ref(this.watchSize)}>
+          ${showMap ? this.watermark() : nothing}
+          ${showCar ? identity : html`<div class="map-only-spacer"></div>`}
+        </div>
+        ${showCar
+          ? html`<div class="car-stage">
+              ${this.carArt(typeof model === "string" ? model : undefined)}
+            </div>`
+          : nothing}
       </div>
     `;
   }
 
   private mapEnabled(): boolean {
     return this._config?.show_map !== false;
+  }
+
+  private carArt(model: string | undefined) {
+    if (officialImageEnabled(this._config) && this._carImageUrl && !this._carImageFailed) {
+      return html`<img
+        class="car official"
+        alt=${this.text.car}
+        src=${this._carImageUrl}
+        @error=${() => this.failCarImage()}
+      />`;
+    }
+    return carDrawing(model, this.text.car);
+  }
+
+  private failCarImage(): void {
+    this._carImageFailed = true;
+  }
+
+  private async ensureCarImage(): Promise<void> {
+    const show = this.flags.car && officialImageEnabled(this._config);
+    const target = show ? carImageTarget(this.readings.values()) : null;
+    const key = target ? `${target.entryId}:${target.vehicleId}` : "";
+    if (!show || !target) {
+      if (this._carImageKey || this._carImageUrl || this._carImageFailed) {
+        this._carImageKey = "";
+        this._carImageUrl = "";
+        this._carImageFailed = false;
+      }
+      return;
+    }
+    if (key === this._carImageKey && (this._carImageUrl || this._carImageFailed)) {
+      return;
+    }
+    this._carImageGen += 1;
+    const generation = this._carImageGen;
+    this._carImageKey = key;
+    this._carImageUrl = "";
+    this._carImageFailed = false;
+    const hass = this.hass;
+    if (!hass?.callWS || !hass.hassUrl) {
+      this._carImageFailed = true;
+      return;
+    }
+    try {
+      const url = await signedCarImageUrl(hass, target.entryId, target.vehicleId);
+      if (generation !== this._carImageGen) {
+        return;
+      }
+      if (!url) {
+        this._carImageFailed = true;
+        return;
+      }
+      this._carImageUrl = url;
+    } catch {
+      if (generation === this._carImageGen) {
+        this._carImageFailed = true;
+      }
+    }
   }
 
   private headerMapReady(): boolean {
@@ -1176,10 +1459,14 @@ export class TeslaLoggerCard extends LitElement {
 
   private open(view: ViewName): void {
     this._error = "";
+    this.clearZoom();
     this._view = view;
     if (view !== "drive") {
       this._driveId = undefined;
       this._detail = undefined;
+    }
+    if (view !== "charge") {
+      this._chargeId = undefined;
     }
   }
 
@@ -1195,6 +1482,9 @@ export class TeslaLoggerCard extends LitElement {
     }
     if (this._view === "charges") {
       return this.charges();
+    }
+    if (this._view === "charge") {
+      return this.charge();
     }
     if (this._view === "charts") {
       return this.charts();
@@ -1279,7 +1569,9 @@ export class TeslaLoggerCard extends LitElement {
 
   private drive() {
     const detail = this._detail;
+    const fields = driveDetailFlags(this._config);
     const efficiency = whPerKm(detail?.energy_used_kwh, detail?.distance_km);
+    const samples = detail ? this.visibleSamples(detail.series) : [];
     return html`
       <div class="toolbar">
         <div class="back">
@@ -1294,31 +1586,112 @@ export class TeslaLoggerCard extends LitElement {
         ? html`
             ${this.routeTitle(detail)}
             <div class="grid">
-              ${this.metric(this.text.distance, this.km(detail.distance_km))}
-              ${this.metric(this.text.duration, formatDuration(detail.duration_s))}
-              ${this.metric(this.text.energy, this.kwh(detail.energy_used_kwh))}
-              ${this.metric(
-                this.text.efficiency,
-                efficiency == null ? "—" : `${formatNumber(efficiency, 0, this.cardLang)} Wh/km`,
-              )}
+              ${fields.distance ? this.metric(this.text.distance, this.km(detail.distance_km)) : nothing}
+              ${fields.duration ? this.metric(this.text.duration, formatDuration(detail.duration_s)) : nothing}
+              ${fields.energy ? this.metric(this.text.energy, this.kwh(detail.energy_used_kwh)) : nothing}
+              ${fields.efficiency
+                ? this.metric(
+                    this.text.efficiency,
+                    efficiency == null ? "—" : `${formatNumber(efficiency, 0, this.cardLang)} Wh/km`,
+                  )
+                : nothing}
             </div>
-            <p class="message">${this.text.map}</p>
-            ${detail.route.length
-              ? html`<div class="map"></div>`
-              : html`<p class="message">${this.text.noRoute}</p>`}
-            ${this.chart(this.text.speedChart, detail.series, "speed_kmh", "km/h")}
-            ${this.chart(this.text.elevationChart, detail.series, "elevation_m", "m")}
-            ${this.chart(this.text.batteryChart, detail.series, "battery_level", "%")}
+            ${fields.map
+              ? html`
+                  <p class="message">${this.text.map}</p>
+                  ${detail.route.length
+                    ? html`<div class="map"></div>`
+                    : html`<p class="message">${this.text.noRoute}</p>`}
+                `
+              : nothing}
+            ${this.sampleCharts(samples, [
+              fields.speed ? ["speed_kmh", this.text.speedChart, "km/h"] : null,
+              fields.power ? ["power_kw", this.text.power, "kW"] : null,
+              fields.elevation ? ["elevation_m", this.text.elevationChart, "m"] : null,
+              fields.battery ? ["battery_level", this.text.batteryChart, "%"] : null,
+            ])}
           `
         : nothing}
     `;
+  }
+
+  private charge() {
+    const charge = this.selectedCharge();
+    const fields = chargeDetailFlags(this._config);
+    const row = charge ? chargeHistory(charge, this.dates) : undefined;
+    const supply = charge ? chargeSupply(charge) : null;
+    const soc = charge
+      ? socRange(charge.start_battery_level, charge.end_battery_level, this.cardLang)
+      : null;
+    const samples = charge?.series ? this.visibleSamples(charge.series) : [];
+    return html`
+      <div class="toolbar">
+        <div class="back">
+          ${this.iconButton("mdi:arrow-left", this.text.back, false, () => this.open("charges"))}
+          <button type="button" class="back-label" @click=${() => this.open("charges")}>
+            ${this.text.back}
+          </button>
+        </div>
+        <span class="page-indicator">${charge ? this.when(charge.start_at) : ""}</span>
+      </div>
+      ${charge
+        ? html`
+            ${row?.place ? html`<p class="route-name">${row.place}</p>` : nothing}
+            <div class="grid">
+              ${fields.energy ? this.metric(this.text.energyAdded, this.kwh(charge.energy_added_kwh)) : nothing}
+              ${fields.duration ? this.metric(this.text.duration, formatDuration(charge.duration_s)) : nothing}
+              ${fields.soc ? this.metric(this.text.soc, soc ?? "—") : nothing}
+              ${fields.power
+                ? this.metric(
+                    this.text.power,
+                    charge.max_power_kw == null
+                      ? "—"
+                      : `${formatNumber(charge.max_power_kw, 0, this.cardLang)} kW`,
+                  )
+                : nothing}
+              ${fields.ac_dc ? this.metric(this.text.acDcShort, supply ?? "—") : nothing}
+              ${fields.voltage
+                ? this.metric(
+                    this.text.voltage,
+                    charge.voltage_v == null
+                      ? "—"
+                      : `${formatNumber(charge.voltage_v, 0, this.cardLang)} V`,
+                  )
+                : nothing}
+              ${fields.cost
+                ? this.metric(
+                    this.text.cost,
+                    charge.cost == null ? "—" : formatNumber(charge.cost, 2, this.cardLang),
+                  )
+                : nothing}
+            </div>
+            ${fields.curve
+              ? samples.length
+                ? this.sampleCharts(samples, [
+                    ["power_kw", this.text.power, "kW"],
+                    ["battery_level", this.text.batteryChart, "%"],
+                  ])
+                : html`<p class="message">${this.text.noCurve}</p>`
+              : nothing}
+          `
+        : nothing}
+    `;
+  }
+
+  private selectedCharge(): Charge | undefined {
+    return this._charges?.data.find((item) => item.id === this._chargeId);
   }
 
   private charges() {
     const page = this._charges;
     return html`
       ${this.listToolbar(page)}
-      ${this.historyGroups(page?.data || [], (charge) => chargeHistory(charge, this.dates), 4)}
+      ${this.historyGroups(
+        page?.data || [],
+        (charge) => chargeHistory(charge, this.dates),
+        4,
+        (charge) => this.openCharge(charge.id),
+      )}
       ${page && page.data.length === 0
         ? html`<p class="message">${this.text.emptyCharges}</p>`
         : nothing}
@@ -1359,6 +1732,7 @@ export class TeslaLoggerCard extends LitElement {
 
   private periodBar() {
     return html`
+      ${this._zoom ? this.zoomReset() : nothing}
       <div class="periods" role="group" aria-label=${this.text.period}>
         ${(["week", "month", "year"] as Period[]).map(
           (period) => html`
@@ -1380,7 +1754,8 @@ export class TeslaLoggerCard extends LitElement {
     const show = this.flags;
     const series = this._series;
     const buckets = series?.buckets ?? [];
-    const selected = buckets.length ? this.selectedBucketIndex(buckets) : -1;
+    const shown = this.sliceWindow(buckets);
+    const selected = buckets.length ? this.relativeSelection(buckets) : -1;
     const main = show.chart_consumption || show.chart_distance || show.chart_energy;
     const extra =
       show.battery_health ||
@@ -1392,14 +1767,19 @@ export class TeslaLoggerCard extends LitElement {
       ${main && series && buckets.length === 0
         ? html`<p class="message">${this.text.emptySeries}</p>`
         : nothing}
-      ${main && buckets.length
+      ${main && shown.length
         ? html`
             ${this.chartSwitch()}
-            <div class="series-list">${this.mainChart(selected)}</div>
+            <div class="chart-stage series-list">
+              ${this.syncedTooltip(shown)}
+              ${this.mainChart(selected)}
+            </div>
           `
         : nothing}
-      ${show.totals && selected >= 0 ? this.bucketTotals(buckets[selected]) : nothing}
-      ${extra ? this.extraCharts(buckets, selected) : nothing}
+      ${show.totals && this.absoluteSelection(buckets) >= 0
+        ? this.bucketTotals(buckets[this.absoluteSelection(buckets)])
+        : nothing}
+      ${extra ? this.extraCharts(shown, selected) : nothing}
     `;
   }
 
@@ -1543,7 +1923,38 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   private selectBucket(index: number): void {
-    this._bucketIndex = index;
+    if (this._eatClick) {
+      this._eatClick = false;
+      return;
+    }
+    const origin = this._zoom?.start ?? 0;
+    this._bucketIndex = origin + index;
+  }
+
+  private absoluteSelection(buckets: StatsBucket[]): number {
+    if (!buckets.length) {
+      return -1;
+    }
+    return this.selectedBucketIndex(buckets);
+  }
+
+  private relativeSelection(buckets: StatsBucket[]): number {
+    const absolute = this.absoluteSelection(buckets);
+    const origin = this._zoom?.start ?? 0;
+    const end = this._zoom?.end ?? Math.max(0, buckets.length - 1);
+    if (absolute < origin || absolute > end) {
+      return Math.max(0, Math.min(end, absolute) - origin);
+    }
+    return absolute - origin;
+  }
+
+  private sliceWindow<T>(items: T[]): T[] {
+    if (!this._zoom || items.length === 0) {
+      return items;
+    }
+    const start = Math.max(0, Math.min(this._zoom.start, items.length - 1));
+    const end = Math.max(start, Math.min(this._zoom.end, items.length - 1));
+    return items.slice(start, end + 1);
   }
 
   private bucketHeading(bucket: StatsBucket): string {
@@ -1594,7 +2005,7 @@ export class TeslaLoggerCard extends LitElement {
     selected: number,
     compact = false,
   ) {
-    const buckets = this._series?.buckets ?? [];
+    const buckets = this.sliceWindow(this._series?.buckets ?? []);
     const digits = unit === "Wh/km" ? 0 : 1;
     const points: ChartPoint[] = buckets.map((bucket) => {
       const value = read(bucket);
@@ -1673,7 +2084,7 @@ export class TeslaLoggerCard extends LitElement {
           <span class="series-title">${this.text.tempUse}</span>
         </figcaption>
         ${points.length
-          ? this.drawSeries("temp", points, "bar", this.text.tempUse, -1, true, false)
+          ? this.drawSeries("temp", points, "bar", this.text.tempUse, -1, true, false, false)
           : html`<p class="message">${this.text.emptySeries}</p>`}
       </figure>
     `;
@@ -1687,40 +2098,237 @@ export class TeslaLoggerCard extends LitElement {
     selected: number,
     compact: boolean,
     selectable = true,
+    interactive = true,
   ) {
     const formatTick = (value: number) =>
       formatNumber(value, value >= 10 || value === 0 ? 0 : 1, this.cardLang);
+    const width = this._plotWidths[plotKey] ?? (compact ? 200 : 360);
+    const brush = interactive ? this.brushStyle(points.length, width, compact) : undefined;
     return html`
-      <div class="plot" data-plot=${plotKey} ${ref(this.watchSize)}>
+      <div
+        class="plot"
+        data-plot=${plotKey}
+        ${ref(this.watchSize)}
+        @pointerdown=${(event: PointerEvent) => this.chartPointerDown(event, points.length, compact)}
+        @pointermove=${(event: PointerEvent) => this.chartPointerMove(event, points.length, compact)}
+        @pointerup=${() => this.chartPointerUp(points.length)}
+        @pointercancel=${() => this.chartPointerLeave(true)}
+        @pointerleave=${() => this.chartPointerLeave(false)}
+      >
+        ${brush ? html`<div class="brush" style=${brush}></div>` : nothing}
         ${seriesChart(points, kind, label, formatTick, {
           width: this._plotWidths[plotKey],
           compact,
           selected,
+          highlight: interactive ? this._hover : null,
           onSelect: selectable ? (index) => this.selectBucket(index) : undefined,
         })}
       </div>
     `;
   }
 
-  private chart(
-    title: string,
-    points: DriveDetail["series"],
-    key: string,
-    unit: string,
-  ) {
-    const values = seriesValues(points, key);
-    if (values.length < 2) {
+  private brushStyle(count: number, width: number, compact: boolean): string | undefined {
+    if (!this._brush || count <= 0) {
+      return undefined;
+    }
+    const start = slotBand(this._brush.start, count, width, compact);
+    const end = slotBand(this._brush.end, count, width, compact);
+    const left = Math.min(start.left, end.left);
+    const right = Math.max(start.left + start.width, end.left + end.width);
+    return `left:${left.toFixed(2)}%;width:${Math.max(0, right - left).toFixed(2)}%`;
+  }
+
+  private chartPointerDown(event: PointerEvent, count: number, compact: boolean): void {
+    const index = this.indexFromEvent(event, count, compact);
+    if (index == null) {
+      return;
+    }
+    this._dragAnchor = index;
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  }
+
+  private chartPointerMove(event: PointerEvent, count: number, compact: boolean): void {
+    const index = this.indexFromEvent(event, count, compact);
+    if (index == null) {
+      return;
+    }
+    if (this._hover !== index) {
+      this._hover = index;
+    }
+    if (this._dragAnchor == null) {
+      return;
+    }
+    const span = brushSpan(this._dragAnchor, index);
+    const next = span ? { start: span.start, end: span.end } : null;
+    if (this._brush?.start !== next?.start || this._brush?.end !== next?.end) {
+      this._brush = next;
+    }
+  }
+
+  private chartPointerUp(count: number): void {
+    const anchor = this._dragAnchor;
+    const span = this._brush;
+    this._dragAnchor = null;
+    this._brush = null;
+    if (anchor == null || !span) {
+      return;
+    }
+    this._eatClick = true;
+    const origin = this._zoom?.start ?? 0;
+    this.applyZoom(origin + span.start, origin + span.end, origin + count);
+  }
+
+  private chartPointerLeave(cancel: boolean): void {
+    if (cancel) {
+      this._dragAnchor = null;
+      this._brush = null;
+    }
+    if (this._dragAnchor != null) {
+      return;
+    }
+    if (this._hover != null) {
+      this._hover = null;
+    }
+  }
+
+  private indexFromEvent(event: PointerEvent, count: number, compact: boolean): number | null {
+    const host = event.currentTarget as HTMLElement | null;
+    const svg = host?.querySelector("svg");
+    const rect = (svg ?? host)?.getBoundingClientRect();
+    if (!rect) {
+      return null;
+    }
+    return slotIndex(event.clientX, rect, count, compact);
+  }
+
+  private applyZoom(start: number, end: number, fullLength: number): void {
+    if (fullLength <= 2 || end - start < 1) {
+      return;
+    }
+    const last = fullLength - 1;
+    const clampedStart = Math.max(0, Math.min(start, last));
+    const clampedEnd = Math.max(clampedStart, Math.min(end, last));
+    if (clampedStart === 0 && clampedEnd === last) {
+      this._zoom = null;
+      return;
+    }
+    this._zoom = { start: clampedStart, end: clampedEnd };
+    if (this._bucketIndex == null || this._bucketIndex < clampedStart || this._bucketIndex > clampedEnd) {
+      this._bucketIndex = clampedEnd;
+    }
+    this._hover = null;
+  }
+
+  private clearZoom(): void {
+    this._zoom = null;
+    this._brush = null;
+    this._hover = null;
+    this._dragAnchor = null;
+  }
+
+  private zoomReset() {
+    return html`
+      <button type="button" class="zoom-reset" @click=${() => this.clearZoom()}>
+        ${this.text.resetZoom}
+      </button>
+    `;
+  }
+
+  private syncedTooltip(buckets: StatsBucket[]) {
+    const index = this._hover;
+    const bucket = index == null ? undefined : buckets[index];
+    if (index == null || !bucket) {
       return nothing;
     }
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const scale = `${formatNumber(min, 0, this.cardLang)}–${formatNumber(max, 0, this.cardLang)} ${unit}`;
+    const width = this._plotWidths.consumption || this._plotWidths.distance || this._plotWidths.energy || 360;
+    const band = slotBand(index, buckets.length, width, false);
+    const rows = [
+      [this.text.consumptionChart, finiteOrNull(bucket.wh_per_km), "Wh/km", 0],
+      [this.text.distance, finiteOrNull(bucket.distance_km), "km", 1],
+      [this.text.chargedChart, finiteOrNull(bucket.energy_charged_kwh), "kWh", 1],
+    ] as const;
     return html`
-      <div class="chart-block">
-        <span class="muted">${title} · ${scale}</span>
-        ${sparkline(values)}
+      <div class="chart-tooltip" style=${`left:${Math.min(band.left, 62).toFixed(1)}%;top:8px`}>
+        <div class="tip-head">${bucketLabel(bucket.start, this._period, this.dates)}</div>
+        ${rows.map(
+          ([label, value, unit, digits]) => html`
+            <div>${label} ${value == null ? "—" : `${formatNumber(value, digits, this.cardLang)} ${unit}`}</div>
+          `,
+        )}
       </div>
     `;
+  }
+
+  private sampleCharts(
+    samples: SeriesPoint[],
+    specs: Array<readonly [string, string, string] | null>,
+  ) {
+    const charts = specs
+      .filter((spec): spec is readonly [string, string, string] => spec != null)
+      .map(([key, title, unit]) => ({
+        key,
+        title,
+        unit,
+        points: this.samplePoints(samples, key, unit),
+      }))
+      .filter((chart) => chart.points.filter((point) => point.value != null).length >= 2);
+    if (charts.length === 0) {
+      return nothing;
+    }
+    return html`
+      <div class="detail-charts">
+        ${this._zoom ? this.zoomReset() : nothing}
+        ${charts.map(
+          (chart) => html`
+            <figure class="series-card compact">
+              <figcaption>
+                <span class="series-title">${chart.title}</span>
+                <span class="series-value">${this.sampleHeadline(chart.points, chart.unit)}</span>
+              </figcaption>
+              ${this.drawSeries(chart.key, chart.points, "line", chart.title, this._hover ?? -1, true, false)}
+            </figure>
+          `,
+        )}
+      </div>
+    `;
+  }
+
+  private samplePoints(samples: SeriesPoint[], key: string, unit: string): ChartPoint[] {
+    return samples.map((sample) => {
+      const raw = (sample as unknown as Record<string, unknown>)[key];
+      const value = typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+      const digits = unit === "kW" ? 1 : 0;
+      const shown = value == null ? "—" : `${formatNumber(value, digits, this.cardLang)} ${unit}`;
+      const label = this.sampleClock(sample.recorded_at);
+      return { label, value, title: `${label} · ${shown}` };
+    });
+  }
+
+  private sampleHeadline(points: ChartPoint[], unit: string): string {
+    const index = this._hover != null && points[this._hover] ? this._hover : points.length - 1;
+    const point = points[index];
+    if (!point || point.value == null) {
+      return "—";
+    }
+    const digits = unit === "kW" ? 1 : 0;
+    return `${point.label} · ${formatNumber(point.value, digits, this.cardLang)} ${unit}`;
+  }
+
+  private sampleClock(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return new Intl.DateTimeFormat(this.dates.language || "en", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: this.dates.hour12,
+      timeZone: this.dates.timeZone,
+    }).format(date);
+  }
+
+  private visibleSamples(series: SeriesPoint[]): SeriesPoint[] {
+    return this.sliceWindow(series);
   }
 
   private listToolbar(page: Page<unknown> | undefined) {
@@ -1855,8 +2463,6 @@ export class TeslaLoggerCard extends LitElement {
     const body = html`<span class="entry-line"
         ><time class="entry-when" datetime=${row.datetime} title=${row.when} aria-label=${row.when}
           >${row.clock}</time
-        ><strong class="entry-figure">${row.figure ?? "—"}</strong></span
-      ><span class="entry-line entry-secondary"
         ><span
           class=${row.ends ? "entry-place route" : "entry-place"}
           title=${row.place ?? ""}
@@ -1866,6 +2472,8 @@ export class TeslaLoggerCard extends LitElement {
                 ><span class="place-join" aria-hidden="true">→</span
                 ><span class="place-point">${row.ends[1]}</span>`
             : (row.place ?? "")}</span
+        ><strong class="entry-figure">${row.figure ?? "—"}</strong></span
+      ><span class="entry-line entry-secondary"
         ><span class="entry-metrics" title=${row.detail}
           >${row.slots.map((part) =>
             part
@@ -1899,12 +2507,20 @@ export class TeslaLoggerCard extends LitElement {
   private openDrive(id: number): void {
     this._driveId = id;
     this._detail = undefined;
+    this.clearZoom();
     this._view = "drive";
+  }
+
+  private openCharge(id: number): void {
+    this._chargeId = id;
+    this.clearZoom();
+    this._view = "charge";
   }
 
   private setPeriod(period: Period): void {
     this._period = period;
     this._bucketIndex = null;
+    this.clearZoom();
     if (this._view === "charts") {
       void this.loadSeries();
       return;
@@ -1948,18 +2564,20 @@ export class TeslaLoggerCard extends LitElement {
       await this.loadDrives();
     } else if (this._view === "charges" && this.flags.charges && !this._charges) {
       await this.loadCharges();
-    } else if (this._view === "stats" && !this._stats) {
+    } else if (this._view === "stats" && this.flags.stats && !this._stats) {
       await this.loadStats();
     } else if (this._view === "charts" && chartsVisible(this.flags) && this.seriesStale()) {
       await this.loadSeries();
     } else if (this._view === "drive" && this.flags.drives && this._driveId != null && !this._detail) {
       await this.loadDrive();
+    } else if (this._view === "charge" && this.flags.charges && !this._charges) {
+      await this.loadCharges();
     }
   }
 
   private async loadDrives(): Promise<void> {
     await this.load("drives", async () => {
-      const payload = await this.call("get_drives", { page: this._page, per_page: HISTORY_PAGE_SIZE });
+      const payload = await this.call("get_drives", { page: this._page, per_page: pageSize(this._config) });
       if (!isPage<Drive>(payload)) {
         throw new Error(this.text.failed);
       }
@@ -1969,7 +2587,7 @@ export class TeslaLoggerCard extends LitElement {
 
   private async loadCharges(): Promise<void> {
     await this.load("charges", async () => {
-      const payload = await this.call("get_charges", { page: this._page, per_page: HISTORY_PAGE_SIZE });
+      const payload = await this.call("get_charges", { page: this._page, per_page: pageSize(this._config) });
       if (!isPage<Charge>(payload)) {
         throw new Error(this.text.failed);
       }
@@ -2133,119 +2751,21 @@ export class TeslaLoggerCard extends LitElement {
   }
 }
 
-function fieldLabel(name: string, text: Copy): string {
-  const key = name.split(".").pop() ?? name;
-  if (key === "entity") {
-    return text.entity;
+function activityTone(activity: string): string {
+  const value = activity.toLowerCase();
+  if (value === "driving") {
+    return "drive";
   }
-  if (key === "default_view") {
-    return text.defaultView;
+  if (value === "charging") {
+    return "charge";
   }
-  if (key === "show") {
-    return text.viewsGroup;
+  if (value === "asleep" || value === "offline") {
+    return "idle";
   }
-  if (key === "show_charts") {
-    return text.charts;
-  }
-  if (key === "show_map") {
-    return text.showMap;
-  }
-  if (key in text.showFields) {
-    return text.showFields[key as keyof typeof text.showFields];
-  }
-  return name;
+  return "park";
 }
 
-function booleanGrid(name: string, keys: readonly string[]) {
-  return {
-    name,
-    type: "grid",
-    column_min_width: "200px",
-    schema: keys.map((key) => ({ name: key, selector: { boolean: {} } })),
-  };
-}
-
-function editorSchema(text: Copy) {
-  return [
-    {
-      name: "entity",
-      required: true,
-      selector: { entity: { integration: "tesla_logger" } },
-    },
-    {
-      name: "show_map",
-      selector: { boolean: {} },
-    },
-    {
-      name: "default_view",
-      selector: {
-        select: {
-          options: [
-            { value: "status", label: text.status },
-            { value: "drives", label: text.drives },
-            { value: "charges", label: text.charges },
-            { value: "stats", label: text.stats },
-            { value: "charts", label: text.charts },
-          ],
-        },
-      },
-    },
-    booleanGrid("show", VIEW_SHOW_KEYS),
-    booleanGrid("show_charts", CHART_SHOW_KEYS),
-  ];
-}
-
-export class TeslaLoggerCardEditor extends LitElement {
-  static properties = {
-    hass: { attribute: false },
-    _config: { state: true },
-  };
-
-  hass?: HomeAssistant;
-  private _config?: CardConfig;
-
-  setConfig(config: CardConfig): void {
-    this._config = { ...config, show_map: config.show_map !== false, show: showFlags(config) };
-  }
-
-  override render() {
-    if (!this.hass || !this._config) {
-      return nothing;
-    }
-    const text = copy(language(this.hass.locale?.language || this.hass.language));
-    const flags = showFlags(this._config);
-    const data = {
-      ...this._config,
-      show: Object.fromEntries(VIEW_SHOW_KEYS.map((key) => [key, flags[key]])),
-      show_charts: Object.fromEntries(CHART_SHOW_KEYS.map((key) => [key, flags[key]])),
-    };
-    return html`
-      <ha-form
-        .hass=${this.hass}
-        .data=${data}
-        .schema=${editorSchema(text)}
-        .computeLabel=${(schema: { name: string }) => fieldLabel(schema.name, text)}
-        @value-changed=${(event: CustomEvent<{ value: CardConfig & { show_charts?: Record<string, boolean> } }>) => {
-          const value = event.detail.value;
-          const show = showFlags({
-            entity: this._config?.entity || "",
-            show: { ...flags, ...value.show, ...value.show_charts },
-          });
-          const next = { ...this._config, ...value, show };
-          delete next.show_charts;
-          this._config = next;
-          this.dispatchEvent(
-            new CustomEvent("config-changed", {
-              detail: { config: this._config },
-              bubbles: true,
-              composed: true,
-            }),
-          );
-        }}
-      ></ha-form>
-    `;
-  }
-}
+export { TeslaLoggerCardEditor };
 
 if (!customElements.get("tesla-logger-card-impl")) {
   customElements.define("tesla-logger-card-impl", TeslaLoggerCard);

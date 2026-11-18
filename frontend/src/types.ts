@@ -11,6 +11,7 @@ export interface EntityRegistryEntry {
 
 export interface DeviceRegistryEntry {
   name?: string | null;
+  model?: string | null;
 }
 
 export interface HomeAssistant {
@@ -38,6 +39,10 @@ export interface HomeAssistant {
     notifyOnError?: boolean,
     returnResponse?: boolean,
   ): Promise<{ response?: unknown }>;
+  /** Signs a same-origin path so an `<img>` can load it without a bearer header. */
+  callWS?<T>(message: { type: string; [key: string]: unknown }): Promise<T>;
+  /** Prefix a Home Assistant path with the instance origin. */
+  hassUrl?(path?: string): string;
 }
 
 export interface CardConfig {
@@ -46,10 +51,18 @@ export interface CardConfig {
   default_view?: ViewName;
   /** Faint position map in the header. Omitted means shown. */
   show_map?: boolean;
+  /** Official Tesla render. Omitted means shown. */
+  official_image?: boolean;
+  /** List page length. Omitted means 10. */
+  page_size?: number;
   show?: Partial<Record<string, boolean>>;
+  /** Drive detail metrics. Omitted keys stay visible. */
+  drive_detail?: Partial<Record<string, boolean>>;
+  /** Charge detail metrics. Omitted keys stay visible. */
+  charge_detail?: Partial<Record<string, boolean>>;
 }
 
-export type ViewName = "status" | "drives" | "drive" | "charges" | "stats" | "charts";
+export type ViewName = "status" | "drives" | "drive" | "charges" | "charge" | "stats" | "charts";
 export type Period = "week" | "month" | "year";
 
 export interface Drive {
@@ -74,6 +87,7 @@ export interface RoutePoint {
 export interface SeriesPoint {
   recorded_at: string;
   speed_kmh?: number | null;
+  power_kw?: number | null;
   battery_level?: number | null;
   elevation_m?: number | null;
 }
@@ -97,6 +111,10 @@ export interface Charge {
   address?: string | null;
   geofence?: string | null;
   location?: string | null;
+  cost?: number | null;
+  voltage_v?: number | null;
+  /** Power and state of charge along the session, when the list payload has them. */
+  series?: SeriesPoint[] | null;
 }
 
 export interface Page<T> {

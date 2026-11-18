@@ -70,7 +70,7 @@ describe("loader", () => {
         | null;
       expect(impl?._config?.entity).toBe("sensor.tesla_location");
       expect(impl?._config?.show_map).toBe(false);
-      expect(impl?.shadowRoot?.querySelector("ha-form")).toBeTruthy();
+      expect(impl?.shadowRoot?.querySelector(".editor")).toBeTruthy();
     });
   });
 });

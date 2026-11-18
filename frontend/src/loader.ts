@@ -54,14 +54,21 @@ class TeslaLoggerCardShell extends HTMLElement {
   }
 
   static getStubConfig(hass: HomeAssistant): CardConfig {
+    // Kept inline so this loader stays one dynamic import. stubConfig() must match.
     const entity =
       Object.keys(hass.states).find((id) => hass.states[id]?.attributes?.key === "location") || "";
     return {
       entity,
+      show_map: true,
+      official_image: true,
+      page_size: 10,
       show: {
+        car: true,
         status: true,
         drives: true,
         charges: true,
+        stats: true,
+        charts: true,
         chart_consumption: true,
         chart_distance: true,
         chart_energy: true,
@@ -70,6 +77,27 @@ class TeslaLoggerCardShell extends HTMLElement {
         charging_split: true,
         vampire_drain: true,
         consumption_vs_temp: true,
+      },
+      drive_detail: {
+        distance: true,
+        duration: true,
+        energy: true,
+        efficiency: true,
+        map: true,
+        speed: true,
+        power: true,
+        elevation: true,
+        battery: true,
+      },
+      charge_detail: {
+        energy: true,
+        duration: true,
+        soc: true,
+        power: true,
+        ac_dc: true,
+        voltage: true,
+        cost: true,
+        curve: true,
       },
     };
   }

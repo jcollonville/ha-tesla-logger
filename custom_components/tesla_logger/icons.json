@@ -30,6 +30,9 @@
     },
     "device_tracker": {
       "location": { "default": "mdi:car" }
+    },
+    "image": {
+      "car": { "default": "mdi:car" }
     }
   }
 }

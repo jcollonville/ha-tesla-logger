@@ -6,7 +6,9 @@ import {
   chartFrame,
   currentBucketIndex,
   niceMax,
+  brushSpan,
   seriesChart,
+  slotIndex,
   type ChartPoint,
 } from "./charts";
 
@@ -32,6 +34,22 @@ function viewBox(host: HTMLElement): number[] {
     .split(" ")
     .map((part) => Number(part));
 }
+
+describe("pointer slots", () => {
+  it("maps a click inside the plot and ignores a single-slot press", () => {
+    const rect = { left: 0, width: 360 };
+    expect(slotIndex(10, rect, 6, false)).toBeNull();
+    const first = slotIndex(80, rect, 6, false);
+    const later = slotIndex(240, rect, 6, false);
+    expect(first).not.toBeNull();
+    expect(later).not.toBeNull();
+    expect(brushSpan(first ?? 0, first ?? 0)).toBeNull();
+    expect(brushSpan(first ?? 0, later ?? 0)).toEqual({
+      start: Math.min(first ?? 0, later ?? 0),
+      end: Math.max(first ?? 0, later ?? 0),
+    });
+  });
+});
 
 describe("niceMax", () => {
   it("rounds the axis up to a readable tick", () => {

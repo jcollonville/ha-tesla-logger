@@ -10,6 +10,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TeslaLoggerApi, TeslaLoggerApiError, TeslaLoggerAuthError
+from .car_image import async_register_car_view
 from .const import CONF_TOKEN, CONF_URL, DOMAIN, PLATFORMS
 from .coordinator import TeslaLoggerConfigEntry, TeslaLoggerHub
 from .frontend import async_register_card
@@ -25,12 +26,14 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     del config
     hass.data.setdefault(DOMAIN, {})
     await async_register_card(hass)
+    async_register_car_view(hass)
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: TeslaLoggerConfigEntry) -> bool:
     """Connect to one tesla-logger server."""
     await async_register_card(hass)
+    async_register_car_view(hass)
     api = TeslaLoggerApi(
         async_get_clientsession(hass),
         entry.data[CONF_URL],
@@ -65,7 +68,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: TeslaLoggerConfigEntry)
     if unloaded:
         store = hass.data.get(DOMAIN, {})
         store.pop(entry.entry_id, None)
-        if not any(key not in {"static_registered", "module_registered"} for key in store):
+        kept = {
+            "static_registered",
+            "module_registered",
+            "car_view_registered",
+            "car_view_listener",
+        }
+        if not any(key not in kept for key in store):
             async_unload_services(hass)
     return unloaded
 

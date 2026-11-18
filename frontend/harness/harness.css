@@ -8,15 +8,16 @@ html[data-theme="light"] {
   color-scheme: light;
   color: #212121;
   background: #ececec;
-  --primary-text-color: #212121;
-  --secondary-text-color: #727272;
+  --primary-text-color: #171a20;
+  --secondary-text-color: #5c5e62;
   --disabled-text-color: #bdbdbd;
-  --primary-color: #03a9f4;
-  --accent-color: #ff9800;
+  --primary-color: #3e6ae1;
+  --accent-color: #c27c0e;
+  --success-color: #1d9b52;
   --card-background-color: #ffffff;
   --ha-card-background: #ffffff;
-  --secondary-background-color: #f4f4f5;
-  --divider-color: rgba(0, 0, 0, 0.12);
+  --secondary-background-color: #f4f4f4;
+  --divider-color: rgba(23, 26, 32, 0.12);
   --ha-card-box-shadow:
     0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12);
 }
@@ -25,15 +26,16 @@ html[data-theme="dark"] {
   color-scheme: dark;
   color: #e1e1e1;
   background: #111111;
-  --primary-text-color: #e1e1e1;
-  --secondary-text-color: #9b9b9b;
+  --primary-text-color: #f2f3f5;
+  --secondary-text-color: #a3a6ad;
   --disabled-text-color: #6f6f6f;
-  --primary-color: #03a9f4;
-  --accent-color: #ff9800;
-  --card-background-color: #1c1c1c;
-  --ha-card-background: #1c1c1c;
-  --secondary-background-color: #2a2a2a;
-  --divider-color: rgba(225, 225, 225, 0.12);
+  --primary-color: #6f93ff;
+  --accent-color: #f2b441;
+  --success-color: #4fd17c;
+  --card-background-color: #181b21;
+  --ha-card-background: #181b21;
+  --secondary-background-color: #20242b;
+  --divider-color: rgba(255, 255, 255, 0.1);
   --ha-card-box-shadow: none;
 }
 

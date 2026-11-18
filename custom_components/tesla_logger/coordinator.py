@@ -7,6 +7,7 @@ import logging
 import time
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -16,6 +17,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import TeslaLoggerApi, TeslaLoggerApiError, TeslaLoggerAuthError
+from .car_image import CarImageCache, cache_directory
 from .const import (
     GEOFENCE_CACHE_SECONDS,
     scan_interval_seconds,
@@ -161,6 +163,10 @@ class TeslaLoggerHub:
         self.hass = hass
         self.entry = entry
         self.api = api
+        self.car_images = CarImageCache(
+            cache_directory(Path(hass.config.path("tesla_logger", "car_cache")), entry.entry_id),
+            api.fetch_car_image,
+        )
         self.coordinators: dict[int, TeslaLoggerCoordinator] = {}
         self._geofences: list[dict[str, Any]] | None = None
         self._geofences_at = 0.0

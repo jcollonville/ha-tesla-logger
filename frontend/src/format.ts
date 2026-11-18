@@ -312,7 +312,7 @@ export function driveHistory(drive: Drive, prefs: Lang | DatePrefs): HistoryRowM
   };
 }
 
-function chargeKind(charge: Charge): "AC" | "DC" | null {
+export function chargeSupply(charge: Charge): "AC" | "DC" | null {
   if (charge.is_dc === true) {
     return "DC";
   }
@@ -335,7 +335,7 @@ export function chargeHistory(charge: Charge, prefs: Lang | DatePrefs): HistoryR
     finite(charge.duration_s) == null ? null : formatDuration(charge.duration_s),
     socRange(charge.start_battery_level, charge.end_battery_level, lang),
     power == null ? null : `${formatNumber(power, 0, lang)} kW`,
-    chargeKind(charge),
+    chargeSupply(charge),
   ];
   const details = present(slots);
   const day = listDay(charge.start_at, resolved);
