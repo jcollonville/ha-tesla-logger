@@ -12,7 +12,7 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.tesla_logger.api import CarImageUpstream
-from custom_components.tesla_logger.car_image import REVALIDATE_SECONDS, CarImageCache
+from custom_components.tesla_logger.car_image import REVALIDATE_SECONDS, CarImageCache, _Stored
 from custom_components.tesla_logger.const import (
     CONF_SCAN_INTERVAL,
     CONF_TOKEN,
@@ -20,7 +20,7 @@ from custom_components.tesla_logger.const import (
     CONF_WEBSOCKET,
     DOMAIN,
 )
-from tests.fake_server import TOKEN, VIN, placeholder_png
+from tests.fake_server import TOKEN, VIN, placeholder_png, synthetic_png, truncated_idat
 
 PNG = placeholder_png()
 PNG_NEXT = placeholder_png((180, 40, 40))
@@ -36,6 +36,12 @@ def _meta_text(directory: Path) -> str:
 
 def _tree_names(directory: Path) -> list[str]:
     return [path.name for path in directory.rglob("*")]
+
+
+def _cached_pngs(directory: Path) -> list[Path]:
+    if not directory.exists():
+        return []
+    return list(directory.rglob("*.png"))
 
 
 def test_placeholder_is_a_png() -> None:
@@ -279,3 +285,157 @@ async def test_view_returns_503_until_a_render_exists(
     found = await client.get(path)
     assert found.status == 200
     assert await found.read() == PNG
+
+
+def _seed_truncated(directory: Path, vehicle_id: int, fetched_at: float) -> bytes:
+    bad = truncated_idat(placeholder_png())
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{vehicle_id}.png").write_bytes(bad)
+    (directory / f"{vehicle_id}.json").write_text(
+        json.dumps({"etag": '"stale"', "missing": False, "fetched_at": fetched_at}),
+        encoding="utf-8",
+    )
+    return bad
+
+
+async def test_cache_does_not_store_a_truncated_png(tmp_path: Path) -> None:
+    """An incomplete PNG is a transient failure and is not written."""
+    bad = truncated_idat(placeholder_png())
+
+    async def fetch(vehicle_id: int, etag: str | None) -> CarImageUpstream:
+        del vehicle_id, etag
+        return CarImageUpstream("image", bad, '"cut"')
+
+    cache = CarImageCache(tmp_path, fetch)
+    missed = await cache.get(4)
+    assert missed.content is None
+    assert missed.missing is False
+    assert _tree_names(tmp_path) == []
+
+
+async def test_cache_keeps_a_good_png_when_the_next_body_is_truncated(tmp_path: Path) -> None:
+    """A later incomplete download does not replace bytes that already validated."""
+    clock = {"t": 1_700_000_000.0}
+    calls = 0
+
+    async def fetch(vehicle_id: int, etag: str | None) -> CarImageUpstream:
+        del vehicle_id, etag
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return CarImageUpstream("image", PNG, '"good"')
+        return CarImageUpstream("image", truncated_idat(PNG), '"cut"')
+
+    cache = CarImageCache(tmp_path, fetch, now=lambda: clock["t"])
+    assert (await cache.get(4)).content == PNG
+    clock["t"] += REVALIDATE_SECONDS
+    assert (await cache.get(4)).content == PNG
+    assert (tmp_path / "4.png").read_bytes() == PNG
+    meta = json.loads((tmp_path / "4.json").read_text(encoding="utf-8"))
+    assert meta["etag"] == '"good"'
+
+
+async def test_cache_discards_an_invalid_disk_png_and_refetches(tmp_path: Path) -> None:
+    """A truncated file on disk is deleted and replaced on the next read."""
+    clock = {"t": 1_700_000_000.0}
+    _seed_truncated(tmp_path, 4, clock["t"])
+    calls: list[str | None] = []
+
+    async def fetch(vehicle_id: int, etag: str | None) -> CarImageUpstream:
+        del vehicle_id
+        calls.append(etag)
+        return CarImageUpstream("image", PNG, '"fresh"')
+
+    cache = CarImageCache(tmp_path, fetch, now=lambda: clock["t"])
+    assert (await cache.get(4)).content == PNG
+    assert calls == [None]
+    assert (tmp_path / "4.png").read_bytes() == PNG
+    meta = json.loads((tmp_path / "4.json").read_text(encoding="utf-8"))
+    assert meta["etag"] == '"fresh"'
+
+
+async def test_cache_discards_an_invalid_disk_png_when_the_refetch_fails(tmp_path: Path) -> None:
+    """A truncated file is not served when the replacement download fails."""
+    clock = {"t": 1_700_000_000.0}
+    _seed_truncated(tmp_path, 4, clock["t"])
+
+    async def fetch(vehicle_id: int, etag: str | None) -> CarImageUpstream:
+        del vehicle_id, etag
+        return CarImageUpstream("unavailable")
+
+    cache = CarImageCache(tmp_path, fetch, now=lambda: clock["t"])
+    missed = await cache.get(4)
+    assert missed.content is None
+    assert missed.missing is False
+    assert not (tmp_path / "4.png").exists()
+    assert not (tmp_path / "4.json").exists()
+
+
+async def test_cache_discards_an_invalid_memory_png_and_refetches(tmp_path: Path) -> None:
+    """A truncated image already in memory is dropped, and so are its files."""
+    clock = {"t": 1_700_000_000.0}
+    bad = _seed_truncated(tmp_path, 4, clock["t"])
+    calls: list[str | None] = []
+
+    async def fetch(vehicle_id: int, etag: str | None) -> CarImageUpstream:
+        del vehicle_id
+        calls.append(etag)
+        return CarImageUpstream("image", PNG, '"fresh"')
+
+    cache = CarImageCache(tmp_path, fetch, now=lambda: clock["t"])
+    cache._memory[4] = _Stored(bad, '"stale"', False, clock["t"])
+    assert (await cache.get(4)).content == PNG
+    assert calls == [None]
+    assert (tmp_path / "4.png").read_bytes() == PNG
+
+
+async def test_view_serves_a_png_that_arrives_in_small_chunks(
+    hass, hass_client, logger_server, enable_custom_integrations
+) -> None:
+    """The view returns the whole render when the upstream body is fragmented."""
+    state, url = logger_server
+    png = synthetic_png()
+    state.car_png = png
+    state.car_chunk_size = 64
+    entry = await _setup(hass, url)
+    client = await hass_client()
+    response = await client.get(f"/api/tesla_logger/{entry.entry_id}/1/car.png")
+    assert response.status == 200
+    assert await response.read() == png
+
+
+async def test_view_does_not_cache_a_truncated_png(
+    hass, hass_client, logger_server, enable_custom_integrations
+) -> None:
+    """A cut-off IDAT is not stored, and the view stays a retryable 503."""
+    state, url = logger_server
+    state.car_png = truncated_idat(placeholder_png())
+    entry = await _setup(hass, url)
+    client = await hass_client()
+    path = f"/api/tesla_logger/{entry.entry_id}/1/car.png"
+    first = await client.get(path)
+    assert first.status == 503
+    second = await client.get(path)
+    assert second.status == 503
+    assert len(state.car_requests) == 2
+    hub = hass.data[DOMAIN][entry.entry_id]
+    assert _cached_pngs(hub.car_images._directory) == []
+
+
+async def test_view_replaces_a_truncated_cached_png(
+    hass, hass_client, logger_server, enable_custom_integrations
+) -> None:
+    """A truncated file left on disk by an older build is deleted and fetched again."""
+    state, url = logger_server
+    png = synthetic_png((40, 160, 90))
+    state.car_png = png
+    entry = await _setup(hass, url)
+    hub = hass.data[DOMAIN][entry.entry_id]
+    _seed_truncated(hub.car_images._directory, 1, time.time())
+    client = await hass_client()
+    response = await client.get(f"/api/tesla_logger/{entry.entry_id}/1/car.png")
+    assert response.status == 200
+    assert await response.read() == png
+    assert state.car_requests
+    stored = (hub.car_images._directory / "1.png").read_bytes()
+    assert stored == png
