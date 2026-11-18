@@ -51,7 +51,7 @@ describe("loader", () => {
     document.body.append(card);
     await vi.waitFor(() => {
       const impl = card.querySelector("tesla-logger-card-impl");
-      expect(impl?.shadowRoot?.querySelector(".name")?.textContent).toBe("Red");
+      expect(impl?.shadowRoot?.querySelector("tl-vehicle-card, tl-tabs")).toBeTruthy();
     });
   });
 

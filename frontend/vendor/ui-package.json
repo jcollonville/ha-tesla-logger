@@ -1,0 +1,9 @@
+{
+  "name": "@jcollonville/tesla-logger-ui",
+  "version": "0.1.0",
+  "tag": "ui-v0.1.0",
+  "file": "jcollonville-tesla-logger-ui-0.1.0.tgz",
+  "sha256": "bc7635885b142d354363f26203644892cf8e9a0e2966aa22f86be04457a134c3",
+  "url": "https://github.com/jcollonville/tesla-rs/releases/download/ui-v0.1.0/jcollonville-tesla-logger-ui-0.1.0.tgz",
+  "sums": "https://github.com/jcollonville/tesla-rs/releases/download/ui-v0.1.0/SHA256SUMS"
+}

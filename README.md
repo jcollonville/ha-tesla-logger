@@ -138,19 +138,19 @@ charge_detail:
 
 Omitted keys stay visible, and `page_size` defaults to 10. Existing configs that only set `show.drives` or `show_map` keep working. The visual editor (sections, chart blocks, drive detail, charge detail, page size) exposes the same toggles, in the dashboard language.
 
-`show_map` defaults to true. The header hides raw coordinates. When the vehicle device tracker has a latitude and longitude, it shows a faint, desaturated, non-interactive OpenStreetMap centered on the car, with a small red dot. Set `show_map: false` to hide it. The card requests only the tiles visible in that header, at zoom 15, from `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. Range stays in Status, beside battery, not under the car name.
+The card is the Tesla Logger console, rendered with the vendored `@jcollonville/tesla-logger-ui` package (currently 0.1.0, MIT OR Apache-2.0). Home Assistant theme variables are mapped onto the `--tl-*` tokens, and the card passes `hass` locale and time zone into the elements. The script is bundled at build time. The browser never loads JavaScript from the Tesla Logger server.
 
-The header shows the official car render from Home Assistant at `/api/tesla_logger/{entry_id}/{vehicle_id}/car.png`. The card asks Home Assistant to sign that same-origin path; the image request does not carry the server token or a VIN. `{vehicle_id}` is the numeric vehicle id. An older `official_image` key in the card YAML is ignored, and the visual editor does not offer that toggle. If the view returns 404 or 503, or the image fails to load, the card shows a short localized line (“Vehicle image unavailable” / “Image du véhicule indisponible”) in a muted area. It does not draw a fallback car.
+`show_map` defaults to true. The Aperçu place card is a discreet `tl-mini-map`: a dot and, when a drive detail includes a route, a projected path. Latitude and longitude stay in JavaScript properties and are not written into the DOM. The card does not request map tiles. Set `show_map: false` to hide the place card. An optional drive-detail map uses the same projected drawing. It does not call OpenStreetMap or any other tile host.
 
-The card has five views:
+The vehicle card shows the official render from Home Assistant at `/api/tesla_logger/{entry_id}/{vehicle_id}/car.png`. The card asks Home Assistant to sign that same-origin path; the image request does not carry the server token or a VIN. `{vehicle_id}` is the numeric vehicle id. An older `official_image` key in the card YAML is ignored, and the visual editor does not offer that toggle. If the view returns 404 or 503, or the image fails to load, the card shows “Vehicle image unavailable” / “Image du véhicule indisponible”. It does not draw a fallback car.
 
-- Status: official car image, activity, geofence name, and the main readings. Battery and range sit together in Status. The position map stays in the header when coordinates are known
-- Drives: day groups, start and end addresses, distance, duration, and consumption, with a detail view
-- Drive detail: Leaflet map (OpenStreetMap tiles) of the RDP route, plus speed, power, elevation, and battery charts. Hovering one chart moves the others. Drag a chart to zoom
-- Charges, with the same day groups, and a detail view for energy, duration, state of charge, power, AC/DC, voltage, cost, and a charge curve when the payload includes one
-- Week / month / year stats, and charts for consumption, distance, and energy charged. Those charts share one tooltip and one zoom window, and each plot keeps a fixed height
+The tabs follow the console:
 
-Drive routes and the header watermark both load tiles in the browser from OpenStreetMap. The server token is not part of that request.
+- Aperçu: vehicle card (image, battery, range, charge limit, facts), mini map, last drive, last charge, and this month
+- Trajets and Charges: period chips (7 days, 30 days, this year, all), a summary strip, day groups, and an icon pager. The pager sits on the left and the page range on the right. `page_size` defaults to 10
+- Stats: Semaines / Mois / Années, the same summary strip, and the console charts (distance, efficiency, energy charged, cost, range at 100%, parked loss, consumption by temperature)
+
+`default_view: charts` still opens Stats. Dates and clocks follow the Home Assistant locale, 12/24-hour setting, and time zone. Drive and charge detail stay available from a row: metrics, `tl-chart` curves, and the projected route when those blocks are enabled.
 
 ## Development
 
@@ -180,6 +180,8 @@ Tests use a local fake of the read API. They do not talk to a live tesla-logger 
 ## Release a change
 
 1. Bump `version` in `custom_components/tesla_logger/manifest.json`. The card cache-buster reads that value. Keep the same version in `pyproject.toml` and `frontend/package.json`.
+
+To consume a newer `@jcollonville/tesla-logger-ui` release, download its tarball and `SHA256SUMS` into `frontend/vendor/`, update `frontend/vendor/ui-package.json`, point `frontend/package.json` at `file:vendor/<tarball>`, then run `npm install` in `frontend/`. `frontend/scripts/verify-ui.mjs` checks the checksum before tests and the production build. Do not load the package from a server URL at runtime.
 2. Merge to `main`.
 3. The release workflow tags `v<version>` and publishes a GitHub Release with generated notes when that tag does not already exist.
 

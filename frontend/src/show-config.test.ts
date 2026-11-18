@@ -49,7 +49,10 @@ describe("chart visibility", () => {
     });
     expect(chartsVisible(hidden)).toBe(false);
     expect(seriesNeeded(hidden)).toBe(false);
-    expect(fallbackView("charts", hidden)).toBe("status");
+    expect(fallbackView("charts", hidden)).toBe("stats");
+    expect(
+      fallbackView("charts", showFlags({ entity: "sensor.car", show: { ...hidden, stats: false } })),
+    ).toBe("status");
 
     const tempOnly = showFlags({
       entity: "sensor.car",

@@ -15,9 +15,10 @@ describe("card language", () => {
 
   it("translates the card chrome in French and falls back to English", () => {
     const fr = copy("fr");
+    expect(fr.overview).toBe("Aperçu");
     expect(fr.status).toBe("État");
     expect(fr.drives).toBe("Trajets");
-    expect(fr.stats).toBe("Statistiques");
+    expect(fr.stats).toBe("Stats");
     expect(fr.charts).toBe("Graphiques");
     expect(fr.drivingGroup).toBe("Déplacement");
     expect(fr.cabinGroup).toBe("Habitacle");

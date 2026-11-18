@@ -52,6 +52,9 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Verify the vendored console UI
+        working-directory: frontend
+        run: node scripts/verify-ui.mjs
       - name: Install, lint, typecheck, and build
         working-directory: frontend
         run: |
@@ -63,8 +66,12 @@ jobs:
       - name: Built card is committed and self-contained
         run: |
           git diff --exit-code -- custom_components/tesla_logger/www
-          if grep -E "from ['\"](lit|leaflet)['\"]" custom_components/tesla_logger/www/*.js; then
-            echo "Card bundle still imports lit or leaflet"
+          if grep -E "from ['\"](lit|leaflet|@jcollonville/tesla-logger-ui)['\"]" custom_components/tesla_logger/www/*.js; then
+            echo "Card bundle still imports a runtime package"
+            exit 1
+          fi
+          if grep -E "tile\\.openstreetmap|openfreemap|maplibre" custom_components/tesla_logger/www/*.js; then
+            echo "Card bundle still requests third-party map tiles"
             exit 1
           fi
           python3 - <<'PY'
@@ -77,10 +84,15 @@ jobs:
           if not re.search(r"""import\(\s*["']\./[^"']+\.js\?v=""", loader):
               raise SystemExit("loader is missing a relative versioned chunk import")
           scripts = list(www.glob("*.js"))
-          leaflet = [path for path in scripts if path.name.startswith("leaflet-")]
-          if len(leaflet) != 1:
-              raise SystemExit(f"expected one leaflet chunk, found {[path.name for path in leaflet]}")
+          ui = [path for path in scripts if path.name.startswith("tesla-logger-ui-")]
+          if len(ui) != 1:
+              raise SystemExit(f"expected one console UI chunk, found {[path.name for path in ui]}")
+          if "tl-vehicle-card" not in ui[0].read_text(encoding="utf-8"):
+              raise SystemExit("console UI chunk is missing tl-vehicle-card")
           for script in scripts:
+              text = script.read_text(encoding="utf-8")
+              if "leaflet" in text or "openstreetmap" in text:
+                  raise SystemExit(f"{script.name} still references leaflet or OpenStreetMap")
               for suffix in (".gz", ".br"):
                   sibling = Path(str(script) + suffix)
                   if not sibling.is_file() or sibling.stat().st_size >= script.stat().st_size:

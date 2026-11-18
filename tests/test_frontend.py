@@ -40,31 +40,29 @@ async def test_card_static_path_is_a_cached_directory() -> None:
 
 
 def test_built_chunks_are_precompressed_and_split() -> None:
-    """The eager loader stays small; Leaflet is its own precompressed chunk."""
+    """The eager loader stays small; the console UI is its own precompressed chunk."""
     scripts = sorted(WWW.glob("*.js"))
     assert [path.name for path in scripts if path.name == "tesla-logger-card.js"]
     loader = (WWW / "tesla-logger-card.js").read_text(encoding="utf-8")
     assert len(loader.encode()) < 30_000
     assert f"?v={CARD_VERSION}" in loader
     assert 'import("./' in loader or "import('./" in loader
-    leaflet = [path for path in scripts if path.name.startswith("leaflet-")]
-    assert len(leaflet) == 1
-    assert "1.9.4" in leaflet[0].read_text(encoding="utf-8")
+    ui = [path for path in scripts if path.name.startswith("tesla-logger-ui-")]
+    assert len(ui) == 1
+    assert "tl-vehicle-card" in ui[0].read_text(encoding="utf-8")
     for script in scripts:
-        if script == leaflet[0]:
-            continue
-        assert "1.9.4" not in script.read_text(encoding="utf-8")
         text = script.read_text(encoding="utf-8")
+        assert "leaflet" not in text
+        assert "openstreetmap" not in text
         assert 'from"lit"' not in text
-        assert 'from"leaflet"' not in text
         assert "from 'lit'" not in text
-        assert "from 'leaflet'" not in text
+        assert "@jcollonville/tesla-logger-ui" not in text
         for suffix in (".gz", ".br"):
             sibling = Path(str(script) + suffix)
             assert sibling.is_file()
             assert sibling.stat().st_size < script.stat().st_size
     manifest = json.loads((WWW.parent / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["version"] == "0.2.2"
+    assert manifest["version"] == "0.3.0"
 
 
 async def test_aiohttp_serves_precompressed_siblings(tmp_path: Path, allow_sockets) -> None:
