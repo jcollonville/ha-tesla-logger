@@ -1,6 +1,8 @@
 export interface HassEntity {
   state: string;
   attributes: Record<string, unknown>;
+  last_updated?: string;
+  last_changed?: string;
 }
 
 export interface EntityRegistryEntry {

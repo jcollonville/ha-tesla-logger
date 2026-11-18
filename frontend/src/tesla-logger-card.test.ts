@@ -294,6 +294,62 @@ describe("overview", () => {
     expect(card.shadowRoot?.querySelector("svg.car")).toBeNull();
   });
 
+  it("left-aligns the month values, gaps the charge dot, and captions the map", async () => {
+    const hass = frenchHass();
+    hass.states["sensor.fence"] = { state: "Maison", attributes: { key: "geofence", vin: "V" } };
+    hass.states["device_tracker.red"] = {
+      state: "home",
+      last_updated: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+      attributes: { key: "location", vin: "V", latitude: 0, longitude: 0, address: "Allée des tilleuls" },
+    };
+    hass.entities = {
+      ...hass.entities,
+      "sensor.fence": { device_id: "device-1" },
+      "device_tracker.red": { device_id: "device-1" },
+    };
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    card.hass = hass;
+    card.setConfig({ entity: "sensor.tesla_location", show: { drives: false } });
+    const state = card as unknown as {
+      _month?: unknown;
+      _recentCharge?: unknown;
+    };
+    state._month = {
+      drive_count: 42,
+      distance_km: 642,
+      drive_duration_s: 3600,
+      energy_used_kwh: 112,
+      charge_count: 18,
+      energy_added_kwh: 148.2,
+    };
+    state._recentCharge = {
+      id: 3,
+      start_at: "2026-11-16T19:02:00Z",
+      end_at: "2026-11-16T22:14:00Z",
+      energy_added_kwh: 28.4,
+      geofence: "Maison",
+    };
+    card.requestUpdate();
+    await card.updateComplete;
+    const summary = card.shadowRoot?.querySelector("tl-summary-strip") as HTMLElement | null;
+    const value = summary?.shadowRoot?.querySelector("dd");
+    expect(value).toBeTruthy();
+    expect(getComputedStyle(value as Element).marginLeft).toBe("0px");
+    expect(getComputedStyle(value as Element).textAlign).toBe("start");
+    const stop = deep(card.shadowRoot?.querySelector("#derniere-charge")?.shadowRoot, ".route-stop")[0];
+    expect(stop).toBeTruthy();
+    expect(getComputedStyle(stop).paddingLeft).toBe("18px");
+    const caption = card.shadowRoot?.querySelector(".place-text");
+    expect(getComputedStyle(caption as Element).paddingBottom).toBe("24px");
+    expect(getComputedStyle(caption as Element).paddingLeft).toBe("24px");
+    const text = flat(caption);
+    expect(text).toContain("Maison");
+    expect(text).toContain("Allée des tilleuls");
+    expect(text).toContain("Mis à jour");
+  });
+
   it("hides the drives tab and does not request drives", async () => {
     const callService = vi.fn().mockResolvedValue({ response: { data: [], page: 1, per_page: 10, total: 0 } });
     const card = new TeslaLoggerCard();

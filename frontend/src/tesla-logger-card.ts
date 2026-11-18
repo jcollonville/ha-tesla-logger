@@ -229,14 +229,40 @@ export class TeslaLoggerCard extends LitElement {
       grid-column: 1 / -1;
     }
     .place-card {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
       overflow: hidden;
+      padding: 0;
       border: 1px solid var(--tl-line);
       border-radius: var(--tl-radius);
       background: var(--tl-surface);
     }
-    .place-card p {
+    .map-frame {
+      overflow: hidden;
+      background: var(--tl-ha-map);
+    }
+    .place-text {
+      padding: 0 24px 24px;
+    }
+    .place-name,
+    .place-detail,
+    .updated {
       margin: 0;
-      padding: 0 16px 16px;
+    }
+    .place-name {
+      font-size: 1.125rem;
+      font-weight: 500;
+    }
+    .place-detail {
+      margin-top: 2px;
+      color: var(--tl-muted);
+      font-size: 0.875rem;
+    }
+    .updated {
+      margin-top: 12px;
+      color: var(--tl-muted);
+      font-size: 0.8125rem;
     }
     .visually-hidden {
       position: absolute;
@@ -373,6 +399,7 @@ export class TeslaLoggerCard extends LitElement {
   override updated(): void {
     this.classList.toggle("dark", this.dark);
     this.paintHosts();
+    this.patchSharedShadows();
     this.syncPositionMap();
     if (this._config) {
       void this.ensureView();
@@ -403,6 +430,34 @@ export class TeslaLoggerCard extends LitElement {
         host.setAttribute("style", THEME_STYLE);
       }
     });
+  }
+
+  /**
+   * Two 0.1.0 shadow rules disagree with the console page:
+   * `dd` keeps the user-agent start margin, and a single-stop route
+   * drops its padding while the dot stays put. Patches live in the open
+   * shadow so they survive the component's own repaint.
+   */
+  private patchSharedShadows(): void {
+    const patches: Array<[string, string]> = [
+      [
+        "tl-summary-strip",
+        ":host dd,:host dt{margin-inline:0;margin-left:0;margin-right:0;text-align:start} :host dd{margin-top:4px}",
+      ],
+      ["tl-recent-card", ":host .route.single .route-stop{padding-left:18px}"],
+    ];
+    for (const [selector, cssText] of patches) {
+      this.renderRoot.querySelectorAll(selector).forEach((node) => {
+        const root = node.shadowRoot;
+        if (!root || root.querySelector("style[data-card-patch]")) {
+          return;
+        }
+        const style = document.createElement("style");
+        style.dataset.cardPatch = selector;
+        style.textContent = cssText;
+        root.append(style);
+      });
+    }
   }
 
   private syncPositionMap(): void {
@@ -722,11 +777,35 @@ export class TeslaLoggerCard extends LitElement {
     return null;
   }
 
+  private placeDetail(name: string): string | null {
+    const tracker = this.readings.get("location");
+    const raw = tracker?.attributes.address ?? this.readings.get("geofence")?.attributes.address;
+    if (typeof raw !== "string") {
+      return null;
+    }
+    const address = raw.trim();
+    if (!address || address === name) {
+      return null;
+    }
+    return address;
+  }
+
+  private updatedAgo(): string | null {
+    const stamps = [...this.readings.values()].flatMap((entity) => [entity.last_updated, entity.last_changed]);
+    const latest = stamps
+      .filter((value): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value)))
+      .sort()
+      .at(-1);
+    return latest ? this.fmt.ago(latest) : null;
+  }
+
   private overview() {
     const text = this.text;
     const showCar = this.flags.car || this.flags.status;
     const fence = this.label("geofence");
     const place = fence || text.unknownPosition;
+    const detail = this.placeDetail(place);
+    const ago = this.updatedAgo();
     const positioned = this.carPosition() != null;
     return html`
       <div class="overview">
@@ -741,11 +820,17 @@ export class TeslaLoggerCard extends LitElement {
         ${this.mapEnabled()
           ? html`<section class="place-card">
               <h2 class="visually-hidden">${text.position}</h2>
-              <tl-mini-map
-                class="where"
-                .data=${positionMap(fence ? `${text.position} : ${fence}` : text.unknownPosition, (this.label("activity") || "") === "driving", positioned)}
-              ></tl-mini-map>
-              <p class="place-name">${place}</p>
+              <div class="map-frame">
+                <tl-mini-map
+                  class="where"
+                  .data=${positionMap(fence ? `${text.position} : ${fence}` : text.unknownPosition, (this.label("activity") || "") === "driving", positioned)}
+                ></tl-mini-map>
+              </div>
+              <div class="place-text">
+                <p class="place-name">${place}</p>
+                ${detail ? html`<p class="place-detail">${detail}</p>` : nothing}
+                ${ago ? html`<p class="updated">${text.updatedLabel} ${ago}</p>` : nothing}
+              </div>
             </section>`
           : nothing}
         ${this.flags.drives

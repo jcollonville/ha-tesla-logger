@@ -390,10 +390,13 @@ function pageOf<T>(rows: T[], requested: number, page: number) {
   };
 }
 
+const SEEN_AT = new Date(Date.now() - 12 * 60 * 1000).toISOString();
+
 function sensor(key: string, state: string | number) {
   return {
     id: `sensor.${key}`,
     state: String(state),
+    last_updated: SEEN_AT,
     attributes: { key, vin: "TEST", vehicle_id: 1, config_entry_id: "entry-1" },
   };
 }
@@ -426,11 +429,13 @@ const states: HomeAssistant["states"] = {
   },
   "device_tracker.car": {
     state: "home",
+    last_updated: SEEN_AT,
     attributes: {
       key: "location",
       vin: "TEST",
       latitude: 0,
       longitude: 0,
+      address: "Allée des tilleuls",
       vehicle_id: 1,
       config_entry_id: "entry-1",
     },
