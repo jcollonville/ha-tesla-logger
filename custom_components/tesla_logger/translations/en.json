@@ -93,6 +93,9 @@
     },
     "device_tracker": {
       "location": { "name": "Location" }
+    },
+    "image": {
+      "car": { "name": "Car" }
     }
   },
   "services": {

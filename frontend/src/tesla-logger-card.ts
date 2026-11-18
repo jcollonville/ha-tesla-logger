@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { TeslaLoggerCardEditor } from "./card-editor";
 import { carDrawing } from "./car-art";
+import { carImageTarget, officialImageEnabled, signedCarImageUrl } from "./car-image";
 import {
   brushSpan,
   bucketLabel,
@@ -116,6 +117,8 @@ export class TeslaLoggerCard extends LitElement {
     _hover: { state: true },
     _zoom: { state: true },
     _brush: { state: true },
+    _carImageUrl: { state: true },
+    _carImageFailed: { state: true },
   };
 
   hass?: HomeAssistant;
@@ -149,6 +152,10 @@ export class TeslaLoggerCard extends LitElement {
   private _chargeId?: number;
   private _resize?: ResizeObserver;
   private _onScreen?: IntersectionObserver;
+  private _carImageUrl = "";
+  private _carImageFailed = false;
+  private _carImageKey = "";
+  private _carImageGen = 0;
   private routeMap?: { element: HTMLDivElement; destroy(): void };
   private mapToken = 0;
   private mapModule?: Promise<typeof import("./leaflet-map")>;
@@ -281,6 +288,14 @@ export class TeslaLoggerCard extends LitElement {
         width: 100%;
         height: auto;
         aspect-ratio: 400 / 160;
+      }
+      img.car {
+        display: block;
+        width: min(100%, 560px);
+        max-height: 240px;
+        margin: 0 auto;
+        object-fit: contain;
+        object-position: center bottom;
       }
       .car-floor {
         opacity: 0.85;
@@ -1170,6 +1185,9 @@ export class TeslaLoggerCard extends LitElement {
     if (this.shouldLoadMapChunk()) {
       void this.loadMapModule().catch(() => undefined);
     }
+    if (changed.has("hass") || changed.has("_config")) {
+      void this.ensureCarImage();
+    }
   }
 
   override render() {
@@ -1290,7 +1308,7 @@ export class TeslaLoggerCard extends LitElement {
         </div>
         ${showCar
           ? html`<div class="car-stage">
-              ${carDrawing(typeof model === "string" ? model : undefined, this.text.car)}
+              ${this.carArt(typeof model === "string" ? model : undefined)}
             </div>`
           : nothing}
       </div>
@@ -1299,6 +1317,64 @@ export class TeslaLoggerCard extends LitElement {
 
   private mapEnabled(): boolean {
     return this._config?.show_map !== false;
+  }
+
+  private carArt(model: string | undefined) {
+    if (officialImageEnabled(this._config) && this._carImageUrl && !this._carImageFailed) {
+      return html`<img
+        class="car official"
+        alt=${this.text.car}
+        src=${this._carImageUrl}
+        @error=${() => this.failCarImage()}
+      />`;
+    }
+    return carDrawing(model, this.text.car);
+  }
+
+  private failCarImage(): void {
+    this._carImageFailed = true;
+  }
+
+  private async ensureCarImage(): Promise<void> {
+    const show = this.flags.car && officialImageEnabled(this._config);
+    const target = show ? carImageTarget(this.readings.values()) : null;
+    const key = target ? `${target.entryId}:${target.vehicleId}` : "";
+    if (!show || !target) {
+      if (this._carImageKey || this._carImageUrl || this._carImageFailed) {
+        this._carImageKey = "";
+        this._carImageUrl = "";
+        this._carImageFailed = false;
+      }
+      return;
+    }
+    if (key === this._carImageKey && (this._carImageUrl || this._carImageFailed)) {
+      return;
+    }
+    this._carImageGen += 1;
+    const generation = this._carImageGen;
+    this._carImageKey = key;
+    this._carImageUrl = "";
+    this._carImageFailed = false;
+    const hass = this.hass;
+    if (!hass?.callWS || !hass.hassUrl) {
+      this._carImageFailed = true;
+      return;
+    }
+    try {
+      const url = await signedCarImageUrl(hass, target.entryId, target.vehicleId);
+      if (generation !== this._carImageGen) {
+        return;
+      }
+      if (!url) {
+        this._carImageFailed = true;
+        return;
+      }
+      this._carImageUrl = url;
+    } catch {
+      if (generation === this._carImageGen) {
+        this._carImageFailed = true;
+      }
+    }
   }
 
   private headerMapReady(): boolean {

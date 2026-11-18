@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse, urlunparse
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
@@ -13,6 +14,18 @@ from .models import VehicleMeta
 
 _LOGGER = logging.getLogger(__name__)
 _TIMEOUT = ClientTimeout(total=20)
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+MAX_CAR_IMAGE_BYTES = 8 * 1024 * 1024
+CarImageKind = Literal["image", "not_modified", "missing", "unavailable"]
+
+
+@dataclass(frozen=True, slots=True)
+class CarImageUpstream:
+    """One response from the car render endpoint. Bytes are a PNG or absent."""
+
+    kind: CarImageKind
+    content: bytes | None = None
+    etag: str | None = None
 
 
 class TeslaLoggerApiError(Exception):
@@ -252,6 +265,48 @@ class TeslaLoggerApi:
         if not isinstance(payload, list):
             raise TeslaLoggerApiError("unexpected geofence payload")
         return [row for row in payload if isinstance(row, dict)]
+
+    async def fetch_car_image(self, vehicle_id: int, etag: str | None = None) -> CarImageUpstream:
+        """GET the official render. The vehicle id is numeric; a VIN is never interpolated."""
+        if isinstance(vehicle_id, bool) or not isinstance(vehicle_id, int) or vehicle_id < 0:
+            return CarImageUpstream("unavailable")
+        path = f"/api/v1/vehicles/{vehicle_id}/car.png"
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Accept": "image/png",
+        }
+        if etag:
+            headers["If-None-Match"] = etag
+        try:
+            async with self._session.get(
+                f"{self._base}{path}",
+                headers=headers,
+                timeout=_TIMEOUT,
+                allow_redirects=False,
+            ) as response:
+                if response.status == 401:
+                    raise TeslaLoggerAuthError("unauthorized", status=401)
+                if response.status == 304:
+                    return CarImageUpstream("not_modified", etag=response.headers.get("ETag"))
+                if response.status == 404:
+                    return CarImageUpstream("missing")
+                if response.status != 200:
+                    _LOGGER.debug("GET %s failed with status %s", path, response.status)
+                    return CarImageUpstream("unavailable")
+                content_type = response.headers.get("Content-Type", "")
+                if "image/png" not in content_type.lower():
+                    _LOGGER.debug("GET %s returned an unexpected content type", path)
+                    return CarImageUpstream("unavailable")
+                body = await response.content.read(MAX_CAR_IMAGE_BYTES + 1)
+                if len(body) > MAX_CAR_IMAGE_BYTES or not body.startswith(PNG_MAGIC):
+                    _LOGGER.debug("GET %s returned an invalid PNG", path)
+                    return CarImageUpstream("unavailable")
+                return CarImageUpstream("image", content=body, etag=response.headers.get("ETag"))
+        except TeslaLoggerApiError:
+            raise
+        except (TimeoutError, ClientError) as err:
+            _LOGGER.debug("GET %s failed (%s)", path, type(err).__name__)
+            return CarImageUpstream("unavailable")
 
     async def _page(
         self,

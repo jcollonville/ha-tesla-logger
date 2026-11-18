@@ -92,6 +92,7 @@ const EN = {
   entity: "Entity",
   defaultView: "Default view",
   showMap: "Map",
+  officialImage: "Official image",
   showBlocks: "Blocks",
   detailFields: {
     distance: "Distance",
@@ -220,6 +221,7 @@ const FR: typeof EN = {
   entity: "Entité",
   defaultView: "Vue par défaut",
   showMap: "Carte",
+  officialImage: "Image officielle",
   showBlocks: "Blocs",
   detailFields: {
     distance: "Distance",

@@ -40,6 +40,7 @@ PLATFORMS: Final = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
     Platform.DEVICE_TRACKER,
+    Platform.IMAGE,
 ]
 
 SERVICE_GET_DRIVES: Final = "get_drives"

@@ -394,8 +394,41 @@ function sensor(key: string, state: string | number) {
   return {
     id: `sensor.${key}`,
     state: String(state),
-    attributes: { key, vin: "TEST" },
+    attributes: { key, vin: "TEST", vehicle_id: 1, config_entry_id: "entry-1" },
   };
+}
+
+/** Geometric stand-in drawn in the browser. It is not a Tesla render. */
+function placeholderCar(): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 280;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return "";
+  }
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#d7dde6";
+  context.fillRect(70, 120, 500, 90);
+  context.fillStyle = "#8ea0b8";
+  context.beginPath();
+  context.moveTo(230, 120);
+  context.lineTo(300, 62);
+  context.lineTo(430, 62);
+  context.lineTo(500, 120);
+  context.closePath();
+  context.fill();
+  context.fillStyle = "#2c3138";
+  context.beginPath();
+  context.arc(190, 210, 38, 0, Math.PI * 2);
+  context.arc(470, 210, 38, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#f4f1ea";
+  context.beginPath();
+  context.arc(190, 210, 16, 0, Math.PI * 2);
+  context.arc(470, 210, 16, 0, Math.PI * 2);
+  context.fill();
+  return canvas.toDataURL("image/png");
 }
 
 const readings = [
@@ -416,11 +449,24 @@ const readings = [
 const states: HomeAssistant["states"] = {
   "sensor.tesla_location": {
     state: "home",
-    attributes: { friendly_name: "Red", vin: "TEST", key: "location" },
+    attributes: {
+      friendly_name: "Red",
+      vin: "TEST",
+      key: "location",
+      vehicle_id: 1,
+      config_entry_id: "entry-1",
+    },
   },
   "device_tracker.car": {
     state: "home",
-    attributes: { key: "location", vin: "TEST", latitude: 0, longitude: 0 },
+    attributes: {
+      key: "location",
+      vin: "TEST",
+      latitude: 0,
+      longitude: 0,
+      vehicle_id: 1,
+      config_entry_id: "entry-1",
+    },
   },
 };
 const entities: NonNullable<HomeAssistant["entities"]> = {
@@ -439,6 +485,14 @@ const hass = {
   locale: { language: "fr", time_format: "24", time_zone: "server" },
   config: { time_zone: "UTC" },
   themes: { darkMode: theme === "dark" },
+  callWS: async (message: { type: string; [key: string]: unknown }) => {
+    const path = message.path;
+    if (message.type !== "auth/sign_path" || typeof path !== "string") {
+      throw new Error(message.type);
+    }
+    return { path: `${path}?authSig=harness` };
+  },
+  hassUrl: (path?: string) => (path?.includes("/car.png") ? placeholderCar() : (path ?? "")),
   callService: async (_domain: string, service: string, data?: Record<string, unknown>) => {
     const requested = Number(data?.per_page ?? 20);
     const page = Number(data?.page ?? 1);
@@ -581,7 +635,9 @@ async function settle(): Promise<void> {
           ((view === "drives" || view === "charges") && entries > 0
             ? true
             : view === "status"
-              ? metrics > 0 && Boolean(root?.querySelector(".map-dot"))
+              ? metrics > 0 &&
+                Boolean(root?.querySelector(".map-dot")) &&
+                Boolean((root?.querySelector("img.car.official") as HTMLImageElement | null)?.naturalWidth)
               : view === "stats"
                 ? metrics > 0
                 : view === "charts"

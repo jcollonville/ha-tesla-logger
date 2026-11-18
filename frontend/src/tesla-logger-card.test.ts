@@ -911,6 +911,99 @@ describe("editor schema", () => {
     expect(config?.page_size).toBe(10);
     expect(config?.drive_detail?.distance).toBe(true);
   });
+
+  it("turns the official image off from the Image officielle toggle", async () => {
+    const editor = new TeslaLoggerCardEditor();
+    mounted.push(editor as unknown as TeslaLoggerCard);
+    document.body.append(editor);
+    editor.hass = frenchHass();
+    editor.setConfig({ entity: "sensor.tesla_location" });
+    await editor.updateComplete;
+    const input = editor.shadowRoot?.querySelector(
+      "[data-field='official_image']",
+    ) as HTMLInputElement | null;
+    expect(input?.checked).toBe(true);
+    expect(editor.shadowRoot?.textContent).toContain("Image officielle");
+    if (input) {
+      input.checked = false;
+      input.dispatchEvent(new Event("change"));
+    }
+    const config = (editor as unknown as { _config?: CardConfig })._config;
+    expect(config?.official_image).toBe(false);
+  });
+});
+
+const PLACEHOLDER_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+
+describe("official car image", () => {
+  function withImage(url: string) {
+    const callWS = vi.fn().mockResolvedValue({
+      path: "/api/tesla_logger/entry-1/7/car.png?authSig=signed",
+    });
+    const hass = frenchHass();
+    hass.states["sensor.tesla_location"] = {
+      state: "home",
+      attributes: {
+        friendly_name: "Red",
+        key: "location",
+        vin: "5YJTEST0000000001",
+        vehicle_id: 7,
+        config_entry_id: "entry-1",
+      },
+    };
+    hass.callWS = callWS;
+    hass.hassUrl = () => url;
+    return { hass, callWS };
+  }
+
+  async function mount(hass: HomeAssistant, official?: boolean): Promise<TeslaLoggerCard> {
+    const card = new TeslaLoggerCard();
+    mounted.push(card);
+    document.body.append(card);
+    card.hass = hass;
+    card.setConfig({
+      entity: "sensor.tesla_location",
+      ...(official == null ? {} : { official_image: official }),
+    });
+    await card.updateComplete;
+    return card;
+  }
+
+  it("loads the signed Home Assistant url and hides the SVG", async () => {
+    const { hass, callWS } = withImage(PLACEHOLDER_PNG);
+    const card = await mount(hass);
+    await vi.waitFor(() => {
+      const image = card.shadowRoot?.querySelector("img.car.official");
+      expect(image?.getAttribute("src")).toBe(PLACEHOLDER_PNG);
+    });
+    expect(card.shadowRoot?.querySelector("svg.car")).toBeNull();
+    expect(callWS).toHaveBeenCalledWith({
+      type: "auth/sign_path",
+      path: "/api/tesla_logger/entry-1/7/car.png",
+      expires: 3600,
+    });
+    expect(JSON.stringify(callWS.mock.calls)).not.toContain("5YJTEST");
+  });
+
+  it("falls back to the SVG when the image fails or the toggle is off", async () => {
+    const { hass, callWS } = withImage("http://127.0.0.1:9/missing.png");
+    const card = await mount(hass);
+    await vi.waitFor(() => {
+      expect(card.shadowRoot?.querySelector("img.car.official")).toBeTruthy();
+    });
+    card.shadowRoot
+      ?.querySelector("img.car.official")
+      ?.dispatchEvent(new Event("error"));
+    await card.updateComplete;
+    expect(card.shadowRoot?.querySelector("svg.car")).toBeTruthy();
+    expect(card.shadowRoot?.querySelector("img.car.official")).toBeNull();
+
+    const hidden = await mount(hass, false);
+    await hidden.updateComplete;
+    expect(hidden.shadowRoot?.querySelector("svg.car")).toBeTruthy();
+    expect(callWS).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("narrow charts", () => {

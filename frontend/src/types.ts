@@ -39,6 +39,10 @@ export interface HomeAssistant {
     notifyOnError?: boolean,
     returnResponse?: boolean,
   ): Promise<{ response?: unknown }>;
+  /** Signs a same-origin path so an `<img>` can load it without a bearer header. */
+  callWS?<T>(message: { type: string; [key: string]: unknown }): Promise<T>;
+  /** Prefix a Home Assistant path with the instance origin. */
+  hassUrl?(path?: string): string;
 }
 
 export interface CardConfig {
@@ -47,6 +51,8 @@ export interface CardConfig {
   default_view?: ViewName;
   /** Faint position map in the header. Omitted means shown. */
   show_map?: boolean;
+  /** Official Tesla render. Omitted means shown. */
+  official_image?: boolean;
   /** List page length. Omitted means 10. */
   page_size?: number;
   show?: Partial<Record<string, boolean>>;

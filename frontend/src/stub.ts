@@ -9,6 +9,7 @@ export function stubConfig(hass: HomeAssistant): CardConfig {
   return {
     entity,
     show_map: true,
+    official_image: true,
     page_size: DEFAULT_PAGE_SIZE,
     show: { ...SHOW_DEFAULTS },
     drive_detail: { ...DRIVE_DETAIL_DEFAULTS },
