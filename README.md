@@ -99,9 +99,14 @@ Add a **Tesla Logger** card and pick any entity from the vehicle. Every block is
 type: custom:tesla-logger-card
 entity: sensor.red_location
 show_map: true
+page_size: 10
 show:
+  car: true
+  status: true
   drives: true
   charges: true
+  stats: true
+  charts: true
   chart_consumption: true
   chart_distance: true
   chart_energy: true
@@ -110,19 +115,40 @@ show:
   charging_split: true
   vampire_drain: true
   consumption_vs_temp: true
+drive_detail:
+  distance: true
+  duration: true
+  energy: true
+  efficiency: true
+  map: true
+  speed: true
+  power: true
+  elevation: true
+  battery: true
+charge_detail:
+  energy: true
+  duration: true
+  soc: true
+  power: true
+  ac_dc: true
+  voltage: true
+  cost: true
+  curve: true
 ```
 
-`status` can be set the same way. Omitted keys stay visible. The visual editor exposes the same toggles.
+Omitted keys stay visible, and `page_size` defaults to 10. Existing configs that only set `show.drives` or `show_map` keep working. The visual editor (sections, chart blocks, drive detail, charge detail, page size) exposes the same toggles, in the dashboard language.
 
-`show_map` defaults to true. The header hides raw coordinates. When the vehicle device tracker has a latitude and longitude, it shows a faint, desaturated, non-interactive OpenStreetMap centered on the car, with a small red dot. Set `show_map: false` to hide it. The card requests only the tiles visible in that header, at zoom 15, from `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. Range is a Status reading, not a line under the car name.
+`show_map` defaults to true. The header hides raw coordinates. When the vehicle device tracker has a latitude and longitude, it shows a faint, desaturated, non-interactive OpenStreetMap centered on the car, with a small red dot. Set `show_map: false` to hide it. The card requests only the tiles visible in that header, at zoom 15, from `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. Range stays in Status, beside battery, not under the car name.
+
+The car card draws the same side-profile fallback as the Tesla Logger console. The official render is not requested: the server only serves it on the session route `/v/{id}/car.png`, and an `<img>` cannot send the integration token. A token route the card could use, once it exists, is `GET /api/v1/vehicles/{vehicle_id}/car.png` with `Authorization: Bearer` and `image/png`, where `{vehicle_id}` is the numeric vehicle id and never a VIN. The card would still need a same-origin Home Assistant proxy, because the Lovelace image cannot attach that header.
 
 The card has five views:
 
-- Status: battery ring, activity, geofence name, range, and the main readings, with the position map in the header when coordinates are known
-- Drives: distance, duration, and consumption, with a detail view
-- Drive detail: Leaflet map (OpenStreetMap tiles) of the RDP route, plus speed, elevation, and battery charts
-- Charges and week / month / year stats
-- Charts (Graphiques): consumption, distance, and energy charged for the same periods
+- Status: car drawing, activity, geofence name, and the main readings. Battery and range sit together in Status. The position map stays in the header when coordinates are known
+- Drives: day groups, start and end addresses, distance, duration, and consumption, with a detail view
+- Drive detail: Leaflet map (OpenStreetMap tiles) of the RDP route, plus speed, power, elevation, and battery charts. Hovering one chart moves the others. Drag a chart to zoom
+- Charges, with the same day groups, and a detail view for energy, duration, state of charge, power, AC/DC, voltage, cost, and a charge curve when the payload includes one
+- Week / month / year stats, and charts for consumption, distance, and energy charged. Those charts share one tooltip and one zoom window, and each plot keeps a fixed height
 
 Drive routes and the header watermark both load tiles in the browser from OpenStreetMap. The server token is not part of that request.
 

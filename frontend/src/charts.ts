@@ -124,8 +124,56 @@ export interface SeriesChartOptions {
   /** Measured CSS width of the plot. Omit to use the narrow fallback. */
   width?: number;
   selected?: number;
+  /** Hovered slot, shared by every chart in the view. */
+  highlight?: number | null;
   onSelect?: (index: number) => void;
   compact?: boolean;
+}
+
+/** Slot under a pointer, in the same space `seriesChart` uses for `width`. */
+export function slotIndex(
+  clientX: number,
+  rect: { left: number; width: number },
+  count: number,
+  compact = false,
+): number | null {
+  if (count <= 0 || rect.width <= 0) {
+    return null;
+  }
+  const box = chartFrame(rect.width, compact);
+  const x = ((clientX - rect.left) / rect.width) * box.width;
+  const plotWidth = box.width - box.left - box.right;
+  const slot = plotWidth / count;
+  if (x < box.left || x > box.left + plotWidth) {
+    return null;
+  }
+  return Math.max(0, Math.min(count - 1, Math.floor((x - box.left) / slot)));
+}
+
+/** Inclusive brush. A press that stays on one slot is a click, not a zoom. */
+export function brushSpan(
+  anchor: number,
+  current: number,
+): { start: number; end: number } | null {
+  const start = Math.min(anchor, current);
+  const end = Math.max(anchor, current);
+  return end > start ? { start, end } : null;
+}
+
+/** Horizontal band of one slot, as percentages of the chart width. */
+export function slotBand(
+  index: number,
+  count: number,
+  width: number,
+  compact = false,
+): { left: number; width: number } {
+  const box = chartFrame(width, compact);
+  const plot = box.width - box.left - box.right;
+  const slot = count > 0 ? plot / count : plot;
+  return {
+    left: ((box.left + slot * index) / box.width) * 100,
+    width: (slot / box.width) * 100,
+  };
 }
 
 export function seriesChart(
@@ -291,6 +339,9 @@ export function seriesChart(
       })}
       ${bars}
       ${lineParts.length > 1 ? svg`<path class="line" d=${lineParts.join(" ")}></path>` : svg``}
+      ${options.highlight != null && slots[options.highlight]
+        ? svg`<line class="crosshair" x1=${slots[options.highlight].x.toFixed(1)} y1=${box.top} x2=${slots[options.highlight].x.toFixed(1)} y2=${baseline.toFixed(1)}></line>`
+        : svg``}
       ${lineDots}
       ${slots.map(
         (point, index) =>

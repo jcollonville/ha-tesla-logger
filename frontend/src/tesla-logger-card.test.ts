@@ -804,7 +804,9 @@ describe("status groups", () => {
     expect(hero).toEqual(["72 %", "328 km"]);
     expect(card.shadowRoot?.textContent).toContain("Déplacement");
     expect(card.shadowRoot?.textContent).toContain("Habitacle");
-    expect(card.shadowRoot?.querySelector(".ring text")?.textContent).toBe("72%");
+    expect(card.shadowRoot?.querySelector("svg.car")).toBeTruthy();
+    expect(card.shadowRoot?.querySelector(".ring")).toBeNull();
+    expect(card.shadowRoot?.querySelector(".header")?.textContent).not.toContain("328");
     expect(card.shadowRoot?.textContent).not.toContain("Chargeur");
     hass.states["sensor.activity"] = { state: "charging", attributes: { key: "activity", vin: "V" } };
     card.hass = { ...hass };
@@ -882,36 +884,32 @@ describe("editor schema", () => {
     editor.hass = frenchHass();
     editor.setConfig({ entity: "sensor.tesla_location" });
     await editor.updateComplete;
-    const form = editor.shadowRoot?.querySelector("ha-form") as HTMLElement & {
-      schema?: Array<{ name: string; selector?: { select?: { options?: Array<{ label: string }> } } }>;
-    };
-    const names = form.schema?.map((item) => item.name);
-    expect(names).toEqual(["entity", "show_map", "default_view", "show", "show_charts"]);
-    expect(form.schema?.[2]?.selector?.select?.options?.map((option) => option.label)).toEqual([
-      "État",
-      "Trajets",
-      "Charges",
-      "Statistiques",
-      "Graphiques",
-    ]);
-    form.dispatchEvent(
-      new CustomEvent("value-changed", {
-        detail: {
-          value: {
-            entity: "sensor.tesla_location",
-            show_map: true,
-            show: { status: false, drives: true, charges: true, totals: true },
-            show_charts: { chart_distance: false },
-          },
-        },
-        bubbles: true,
-      }),
+    const root = editor.shadowRoot;
+    expect(root?.querySelector(".editor")).toBeTruthy();
+    const options = Array.from(root?.querySelectorAll("[data-field='default_view'] option") ?? []).map(
+      (option) => option.textContent?.trim(),
     );
+    expect(options).toEqual(["État", "Trajets", "Charges", "Statistiques", "Graphiques"]);
+    expect(root?.textContent).toContain("Carte voiture");
+    expect(root?.textContent).toContain("Détail du trajet");
+    expect(root?.textContent).toContain("Courbe de charge");
+    const page = root?.querySelector("[data-field='page_size']") as HTMLInputElement | null;
+    expect(page?.value).toBe("10");
+    const boxes = Array.from(root?.querySelectorAll("label.row") ?? []);
+    const distance = boxes.find((row) => row.textContent?.includes("Distance") && row.closest("fieldset")?.textContent?.includes("Graphiques"));
+    distance?.querySelector("input")?.dispatchEvent(new Event("change"));
+    const distanceInput = distance?.querySelector("input") as HTMLInputElement | undefined;
+    if (distanceInput) {
+      distanceInput.checked = false;
+      distanceInput.dispatchEvent(new Event("change"));
+    }
     const config = (editor as unknown as { _config?: CardConfig })._config;
-    expect(config?.show?.status).toBe(false);
     expect(config?.show?.chart_distance).toBe(false);
     expect(config?.show?.chart_consumption).toBe(true);
+    expect(config?.show?.status).toBe(true);
     expect(config).not.toHaveProperty("show_charts");
+    expect(config?.page_size).toBe(10);
+    expect(config?.drive_detail?.distance).toBe(true);
   });
 });
 

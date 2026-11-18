@@ -2,6 +2,7 @@
  * Dev/test harness for the Lovelace card.
  * Coordinates are the public null-island fixture (0, 0) only.
  */
+import { TeslaLoggerCardEditor } from "../src/card-editor";
 import { TeslaLoggerCard } from "../src/tesla-logger-card";
 import type { HomeAssistant } from "../src/types";
 
@@ -321,6 +322,13 @@ const CHARGES = [
     start_battery_level: 29,
     end_battery_level: 51,
     address: "Centre-ville",
+    cost: 9.4,
+    voltage_v: 400,
+    series: [20, 40, 70, 75, 60, 30].map((power, index) => ({
+      recorded_at: new Date(Date.parse("2026-11-07T16:18:00Z") + index * 3 * 60 * 1000).toISOString(),
+      power_kw: power,
+      battery_level: 29 + index * 4,
+    })),
   },
 ];
 
@@ -366,6 +374,7 @@ const DETAIL = {
   series: [0, 20, 45, 70, 88, 90, 60, 30, 12, 0].map((speed, index) => ({
     recorded_at: new Date(Date.parse(DRIVES[2].start_at) + index * 12 * 60 * 1000).toISOString(),
     speed_kmh: speed,
+    power_kw: Math.round((speed / 8) * 10) / 10,
     elevation_m: 40 + index * 8,
     battery_level: 95 - index * 4.5,
   })),
@@ -426,7 +435,7 @@ for (const reading of readings) {
 const hass = {
   states,
   entities,
-  devices: { "device-1": { name: "Red" } },
+  devices: { "device-1": { name: "Red", model: "Model Y" } },
   locale: { language: "fr", time_format: "24", time_zone: "server" },
   config: { time_zone: "UTC" },
   themes: { darkMode: theme === "dark" },
@@ -464,16 +473,85 @@ const hass = {
   },
 } as HomeAssistant;
 
+class HaEntityPicker extends HTMLElement {
+  private input?: HTMLSelectElement;
+
+  set hass(value: HomeAssistant) {
+    this.renderPicker(value);
+  }
+
+  set value(next: string) {
+    if (this.input) {
+      this.input.value = next;
+    }
+  }
+
+  set label(next: string) {
+    this.dataset.label = next;
+    this.renderPicker();
+  }
+
+  connectedCallback(): void {
+    this.renderPicker();
+  }
+
+  private renderPicker(hassValue?: HomeAssistant): void {
+    const current = this.input?.value || "sensor.tesla_location";
+    const label = this.dataset.label || "Entity";
+    this.innerHTML = "";
+    const field = document.createElement("label");
+    field.style.display = "flex";
+    field.style.flexDirection = "column";
+    field.style.gap = "6px";
+    field.style.fontSize = "0.82rem";
+    field.style.fontWeight = "600";
+    field.style.color = "var(--secondary-text-color)";
+    field.textContent = label;
+    const select = document.createElement("select");
+    select.style.minHeight = "40px";
+    select.style.borderRadius = "10px";
+    select.style.padding = "8px 12px";
+    select.style.background = "var(--secondary-background-color)";
+    select.style.color = "var(--primary-text-color)";
+    select.style.border = "1px solid var(--divider-color)";
+    const source = hassValue?.states ?? hass.states;
+    for (const id of Object.keys(source)) {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = id;
+      select.append(option);
+    }
+    select.value = current;
+    select.addEventListener("change", () => {
+      this.dispatchEvent(new CustomEvent("value-changed", { detail: { value: select.value }, bubbles: true }));
+    });
+    field.append(select);
+    this.append(field);
+    this.input = select;
+  }
+}
+
+if (!customElements.get("ha-entity-picker")) {
+  customElements.define("ha-entity-picker", HaEntityPicker);
+}
+
 const stage = document.querySelector("#stage");
 const card = new TeslaLoggerCard();
-stage?.append(card);
-card.hass = hass;
-const defaultView = view === "drive" ? "drives" : view;
-card.setConfig({
-  entity: "sensor.tesla_location",
-  default_view: defaultView as "status",
-  show_map: true,
-});
+const editor = new TeslaLoggerCardEditor();
+if (view === "editor") {
+  stage?.append(editor);
+  editor.hass = hass;
+  editor.setConfig({ entity: "sensor.tesla_location", show_map: true });
+} else {
+  stage?.append(card);
+  card.hass = hass;
+  const defaultView = view === "drive" || view === "charge" ? "drives" : view;
+  card.setConfig({
+    entity: "sensor.tesla_location",
+    default_view: (defaultView === "editor" ? "status" : defaultView) as "status",
+    show_map: true,
+  });
+}
 
 if (view === "drive") {
   const state = card as unknown as { _driveId?: number; _view: string };
@@ -481,27 +559,39 @@ if (view === "drive") {
   state._view = "drive";
 }
 
+if (view === "charge") {
+  const state = card as unknown as { _chargeId?: number; _view: string; _charges?: unknown };
+  state._chargeId = 10;
+  state._view = "charge";
+}
+
 async function settle(): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     await card.updateComplete;
+    await editor.updateComplete;
     const root = card.shadowRoot;
     const text = root?.textContent ?? "";
     const loading = text.includes("Chargement") || text.includes("Loading");
     const entries = root?.querySelectorAll(".entry").length ?? 0;
     const metrics = root?.querySelectorAll(".metric").length ?? 0;
     const ready =
-      !loading &&
-      ((view === "drives" || view === "charges") && entries > 0
-        ? true
-        : view === "status"
-          ? metrics > 0 && Boolean(root?.querySelector(".map-dot"))
-          : view === "stats"
-            ? metrics > 0
-            : view === "charts"
-              ? Boolean(root?.querySelector(".series-chart"))
-              : view === "drive"
-                ? Boolean(root?.querySelector(".leaflet-container") || root?.querySelector(".map"))
-                : true);
+      view === "editor"
+        ? Boolean(editor.shadowRoot?.querySelector(".editor input, .editor ha-entity-picker"))
+        : !loading &&
+          ((view === "drives" || view === "charges") && entries > 0
+            ? true
+            : view === "status"
+              ? metrics > 0 && Boolean(root?.querySelector(".map-dot"))
+              : view === "stats"
+                ? metrics > 0
+                : view === "charts"
+                  ? Boolean(root?.querySelector(".series-chart"))
+                  : view === "drive"
+                    ? Boolean(root?.querySelector("svg.car")) &&
+                      Boolean(root?.querySelector(".leaflet-container") || root?.querySelector(".map"))
+                    : view === "charge"
+                      ? Boolean(root?.querySelector(".series-chart"))
+                      : true);
     if (ready) {
       await new Promise((resolve) => setTimeout(resolve, 250));
       await card.updateComplete;

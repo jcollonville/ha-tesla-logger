@@ -2,9 +2,12 @@ import type { CardConfig, ViewName } from "./types";
 
 /** Blocks the card can show. Missing keys stay visible. */
 export const SHOW_DEFAULTS = {
+  car: true,
   status: true,
   drives: true,
   charges: true,
+  stats: true,
+  charts: true,
   chart_consumption: true,
   chart_distance: true,
   chart_energy: true,
@@ -20,8 +23,11 @@ export type ShowFlags = Record<ShowKey, boolean>;
 
 export const SHOW_KEYS = Object.keys(SHOW_DEFAULTS) as ShowKey[];
 
+/** Sections in the visual editor, apart from the header map. */
+export const SECTION_KEYS = ["car", "status", "drives", "charges", "stats", "charts"] as const satisfies readonly ShowKey[];
+
 /** Status toggles, including the totals strip. */
-export const VIEW_SHOW_KEYS = ["status", "drives", "charges", "totals"] as const satisfies readonly ShowKey[];
+export const VIEW_SHOW_KEYS = ["car", "status", "drives", "charges", "stats", "totals"] as const satisfies readonly ShowKey[];
 
 /** Chart toggles, kept separate in the editor. */
 export const CHART_SHOW_KEYS = [
@@ -49,7 +55,7 @@ export function showFlags(config: CardConfig | undefined): ShowFlags {
   return flags;
 }
 
-export function chartsVisible(show: ShowFlags): boolean {
+function chartBlocks(show: ShowFlags): boolean {
   return (
     show.chart_consumption ||
     show.chart_distance ||
@@ -62,21 +68,26 @@ export function chartsVisible(show: ShowFlags): boolean {
   );
 }
 
+export function chartsVisible(show: ShowFlags): boolean {
+  return show.charts && chartBlocks(show);
+}
+
 /** Series endpoint feeds every chart except temperature bins. */
 export function seriesNeeded(show: ShowFlags): boolean {
   return (
-    show.chart_consumption ||
-    show.chart_distance ||
-    show.chart_energy ||
-    show.totals ||
-    show.battery_health ||
-    show.charging_split ||
-    show.vampire_drain
+    show.charts &&
+    (show.chart_consumption ||
+      show.chart_distance ||
+      show.chart_energy ||
+      show.totals ||
+      show.battery_health ||
+      show.charging_split ||
+      show.vampire_drain)
   );
 }
 
-export function visibleViews(show: ShowFlags): Array<Exclude<ViewName, "drive">> {
-  const views: Array<Exclude<ViewName, "drive">> = [];
+export function visibleViews(show: ShowFlags): Array<Exclude<ViewName, "drive" | "charge">> {
+  const views: Array<Exclude<ViewName, "drive" | "charge">> = [];
   if (show.status) {
     views.push("status");
   }
@@ -86,7 +97,9 @@ export function visibleViews(show: ShowFlags): Array<Exclude<ViewName, "drive">>
   if (show.charges) {
     views.push("charges");
   }
-  views.push("stats");
+  if (show.stats) {
+    views.push("stats");
+  }
   if (chartsVisible(show)) {
     views.push("charts");
   }
@@ -95,10 +108,16 @@ export function visibleViews(show: ShowFlags): Array<Exclude<ViewName, "drive">>
 
 export function fallbackView(view: ViewName, show: ShowFlags): ViewName {
   if (view === "drive") {
-    return show.drives ? view : (visibleViews(show)[0] ?? "stats");
+    return show.drives ? view : (visibleViews(show)[0] ?? "status");
   }
-  if (view === "stats" || visibleViews(show).includes(view)) {
+  if (view === "charge") {
+    return show.charges ? view : (visibleViews(show)[0] ?? "status");
+  }
+  if (view === "stats") {
+    return show.stats ? view : (visibleViews(show)[0] ?? "status");
+  }
+  if (visibleViews(show).includes(view)) {
     return view;
   }
-  return visibleViews(show)[0] ?? "stats";
+  return visibleViews(show)[0] ?? "status";
 }
