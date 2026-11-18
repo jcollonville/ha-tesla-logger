@@ -1,5 +1,5 @@
 import { transformSync } from "esbuild";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
@@ -49,6 +49,10 @@ function versionedPrecompressedChunks(): Plugin {
       }
     },
     closeBundle() {
+      copyFileSync(
+        fileURLToPath(new URL("./vendor/maplibre-gl-LICENSE.txt", import.meta.url)),
+        join(outDir, "maplibre-gl-LICENSE.txt"),
+      );
       for (const name of readdirSync(outDir)) {
         if (!name.endsWith(".js")) {
           continue;
@@ -70,11 +74,30 @@ function versionedPrecompressedChunks(): Plugin {
           }),
         );
       }
+      const worker = join(outDir, "maplibre-gl-csp-worker.js");
+      copyFileSync(
+        fileURLToPath(new URL("./node_modules/maplibre-gl/dist/maplibre-gl-csp-worker.js", import.meta.url)),
+        worker,
+      );
+      const workerBytes = readFileSync(worker);
+      writeFileSync(`${worker}.gz`, gzipDeterministic(workerBytes));
+      writeFileSync(
+        `${worker}.br`,
+        brotliCompressSync(workerBytes, {
+          params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
+        }),
+      );
     },
   };
 }
 
 export default defineConfig({
+  server: {
+    // Local preview of the basemap. Production traffic stays on the Home Assistant view.
+    proxy: {
+      "/api/tesla_logger/map": "http://127.0.0.1:8765",
+    },
+  },
   test: {
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],
@@ -103,6 +126,9 @@ export default defineConfig({
         entryFileNames: "tesla-logger-card.js",
         chunkFileNames: "[name]-[hash].js",
         manualChunks(id) {
+          if (id.includes("maplibre-gl")) {
+            return "maplibre";
+          }
           if (id.includes("tesla-logger-ui")) {
             return "tesla-logger-ui";
           }

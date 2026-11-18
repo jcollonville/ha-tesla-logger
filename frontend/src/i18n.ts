@@ -125,6 +125,7 @@ const EN = {
   entity: "Entity",
   defaultView: "Default view",
   showMap: "Map",
+  showBasemap: "Basemap",
   carImageUnavailable: "Vehicle image unavailable",
   showBlocks: "Blocks",
   detailFields: {
@@ -287,6 +288,7 @@ const FR: typeof EN = {
   entity: "Entité",
   defaultView: "Vue par défaut",
   showMap: "Carte",
+  showBasemap: "Fond de carte",
   carImageUnavailable: "Image du véhicule indisponible",
   showBlocks: "Blocs",
   detailFields: {

@@ -53,7 +53,8 @@ def test_built_chunks_are_precompressed_and_split() -> None:
     for script in scripts:
         text = script.read_text(encoding="utf-8")
         assert "leaflet" not in text
-        assert "openstreetmap" not in text
+        assert "openfreemap.org" not in text
+        assert "tile.openstreetmap.org" not in text
         assert 'from"lit"' not in text
         assert "from 'lit'" not in text
         assert "@jcollonville/tesla-logger-ui" not in text
@@ -61,8 +62,15 @@ def test_built_chunks_are_precompressed_and_split() -> None:
             sibling = Path(str(script) + suffix)
             assert sibling.is_file()
             assert sibling.stat().st_size < script.stat().st_size
+    assert "maplibre" not in loader
+    maplibre = [
+        path for path in scripts if path.name.startswith("maplibre-") and "worker" not in path.name
+    ]
+    assert len(maplibre) == 1
+    assert (WWW / "maplibre-gl-csp-worker.js").is_file()
+    assert "BSD" in (WWW / "maplibre-gl-LICENSE.txt").read_text(encoding="utf-8")
     manifest = json.loads((WWW.parent / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["version"] == "0.3.0"
+    assert manifest["version"] == "0.3.1"
 
 
 async def test_aiohttp_serves_precompressed_siblings(tmp_path: Path, allow_sockets) -> None:

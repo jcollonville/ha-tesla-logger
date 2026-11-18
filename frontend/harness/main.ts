@@ -93,6 +93,10 @@ if (!customElements.get("ha-card")) {
 
 const params = new URLSearchParams(location.search);
 const theme = params.get("theme") === "dark" ? "dark" : "light";
+const requestedLat = Number(params.get("lat") ?? "0");
+const requestedLon = Number(params.get("lon") ?? "0");
+const fixtureLat = Number.isFinite(requestedLat) && Math.abs(requestedLat) <= 90 ? requestedLat : 0;
+const fixtureLon = Number.isFinite(requestedLon) && Math.abs(requestedLon) <= 180 ? requestedLon : 0;
 const view = params.get("view") || "status";
 const total = Number(params.get("total") || "24");
 const cardWidth = params.get("width") || "760";
@@ -229,6 +233,8 @@ const CHARGES = [
     start_battery_level: 34,
     end_battery_level: 80,
     address: "Maison",
+    latitude: fixtureLat,
+    longitude: fixtureLon,
   },
   {
     id: 2,
@@ -368,8 +374,8 @@ const TEMP_BINS = [-5, 0, 5, 10, 15, 20, 25].map((temp) => ({
 const DETAIL = {
   ...DRIVES[2],
   route: [
-    { recorded_at: DRIVES[2].start_at, latitude: 0, longitude: 0 },
-    { recorded_at: DRIVES[2].end_at, latitude: 0.02, longitude: 0.03 },
+    { recorded_at: DRIVES[2].start_at, latitude: fixtureLat, longitude: fixtureLon },
+    { recorded_at: DRIVES[2].end_at, latitude: fixtureLat + 0.02, longitude: fixtureLon + 0.03 },
   ],
   series: [0, 20, 45, 70, 88, 90, 60, 30, 12, 0].map((speed, index) => ({
     recorded_at: new Date(Date.parse(DRIVES[2].start_at) + index * 12 * 60 * 1000).toISOString(),
@@ -433,8 +439,8 @@ const states: HomeAssistant["states"] = {
     attributes: {
       key: "location",
       vin: "TEST",
-      latitude: 0,
-      longitude: 0,
+      latitude: fixtureLat,
+      longitude: fixtureLon,
       address: "Allée des tilleuls",
       vehicle_id: 1,
       config_entry_id: "entry-1",
@@ -457,6 +463,7 @@ const hass = {
   locale: { language: "fr", time_format: "24", time_zone: "server" },
   config: { time_zone: "UTC" },
   themes: { darkMode: theme === "dark" },
+  auth: { data: { access_token: "harness" } },
   callWS: async (message: { type: string; [key: string]: unknown }) => {
     const path = message.path;
     if (message.type !== "auth/sign_path" || typeof path !== "string") {

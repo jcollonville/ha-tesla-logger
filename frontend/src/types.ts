@@ -33,6 +33,14 @@ export interface HomeAssistant {
   };
   language?: string;
   themes?: { darkMode?: boolean };
+  /**
+   * Session token. MapLibre sends `data.access_token` as a bearer header to
+   * the basemap proxy. It is not written into the DOM.
+   */
+  auth?: {
+    accessToken?: string;
+    data?: { access_token?: string };
+  };
   callService(
     domain: string,
     service: string,
@@ -53,6 +61,8 @@ export interface CardConfig {
   default_view?: ViewName;
   /** Faint position map in the header. Omitted means shown. */
   show_map?: boolean;
+  /** OpenFreeMap basemap behind the position dot and on detail maps. Omitted means shown. */
+  show_basemap?: boolean;
   /** Ignored. Older YAML may still set this; the official render is always used. */
   official_image?: boolean;
   /** List page length. Omitted means 10. */
@@ -113,6 +123,9 @@ export interface Charge {
   address?: string | null;
   geofence?: string | null;
   location?: string | null;
+  /** Used to centre a charge map. Never rendered as text. */
+  latitude?: number | null;
+  longitude?: number | null;
   cost?: number | null;
   voltage_v?: number | null;
   /** Power and state of charge along the session, when the list payload has them. */

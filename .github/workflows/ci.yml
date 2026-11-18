@@ -70,8 +70,8 @@ jobs:
             echo "Card bundle still imports a runtime package"
             exit 1
           fi
-          if grep -E "tile\\.openstreetmap|openfreemap|maplibre" custom_components/tesla_logger/www/*.js; then
-            echo "Card bundle still requests third-party map tiles"
+          if grep -E "tile\\.openstreetmap|openfreemap\\.org" custom_components/tesla_logger/www/*.js; then
+            echo "Card bundle still names a third-party tile host"
             exit 1
           fi
           python3 - <<'PY'
@@ -84,6 +84,17 @@ jobs:
           if not re.search(r"""import\(\s*["']\./[^"']+\.js\?v=""", loader):
               raise SystemExit("loader is missing a relative versioned chunk import")
           scripts = list(www.glob("*.js"))
+          if "maplibre" in loader:
+              raise SystemExit("loader imports MapLibre; it must stay in the lazy chunk")
+          maplibre = [path for path in scripts if path.name.startswith("maplibre-") and "worker" not in path.name]
+          if len(maplibre) != 1:
+              raise SystemExit(f"expected one MapLibre chunk, found {[path.name for path in maplibre]}")
+          worker = www / "maplibre-gl-csp-worker.js"
+          if not worker.is_file():
+              raise SystemExit("MapLibre worker is missing")
+          license_text = (www / "maplibre-gl-LICENSE.txt").read_text(encoding="utf-8")
+          if "BSD" not in license_text:
+              raise SystemExit("MapLibre license file is missing")
           ui = [path for path in scripts if path.name.startswith("tesla-logger-ui-")]
           if len(ui) != 1:
               raise SystemExit(f"expected one console UI chunk, found {[path.name for path in ui]}")
@@ -91,8 +102,8 @@ jobs:
               raise SystemExit("console UI chunk is missing tl-vehicle-card")
           for script in scripts:
               text = script.read_text(encoding="utf-8")
-              if "leaflet" in text or "openstreetmap" in text:
-                  raise SystemExit(f"{script.name} still references leaflet or OpenStreetMap")
+              if "leaflet" in text or "openfreemap.org" in text or "tile.openstreetmap.org" in text:
+                  raise SystemExit(f"{script.name} still names a third-party tile host")
               for suffix in (".gz", ".br"):
                   sibling = Path(str(script) + suffix)
                   if not sibling.is_file() or sibling.stat().st_size >= script.stat().st_size:

@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./basemap", async () => {
+  const actual = await vi.importActual<typeof import("./basemap")>("./basemap");
+  return {
+    ...actual,
+    syncBasemap: vi.fn(),
+    releaseBasemap: vi.fn(),
+  };
+});
+
 import { safeError } from "./format";
 import "./loader";
 import { TeslaLoggerCard, TeslaLoggerCardEditor } from "./tesla-logger-card";
@@ -286,7 +295,10 @@ describe("overview", () => {
     expect(text).not.toContain("1.25");
     expect(text).not.toContain("2.5");
     expect(text).not.toContain("openstreetmap");
+    expect(text).not.toContain("openfreemap");
     expect(text).not.toContain("tile.");
+    expect(text).toContain("OpenMapTiles");
+    expect(card.shadowRoot?.querySelector("[data-map='overview']")).toBeTruthy();
     const map = card.shadowRoot?.querySelector("tl-mini-map") as Element | null;
     expect(map?.getAttribute("latitude")).toBeNull();
     expect(map?.getAttribute("longitude")).toBeNull();
@@ -454,6 +466,8 @@ describe("editor schema", () => {
       "stats",
     );
     expect(editor.shadowRoot?.textContent).toContain("Carte voiture");
+    expect(editor.shadowRoot?.textContent).toContain("Fond de carte");
+    expect((editor.shadowRoot?.querySelector("[data-field='show_basemap']") as HTMLInputElement).checked).toBe(true);
     expect(editor.shadowRoot?.textContent).toContain("Courbe de charge");
     expect((editor.shadowRoot?.querySelector("[data-field='page_size']") as HTMLInputElement).value).toBe("10");
   });
@@ -554,8 +568,48 @@ describe("drive detail", () => {
     expect(text).toContain("Retour");
     expect(text).toContain("Vitesse");
     expect(card.shadowRoot?.querySelector(".leaflet-container")).toBeNull();
+    expect(card.shadowRoot?.querySelector("[data-map='drive']")).toBeTruthy();
+    expect(text).toContain("OpenMapTiles");
     expect(text).not.toContain("openstreetmap");
+    expect(text).not.toContain("openfreemap");
     expect(text).not.toContain("0.02");
     expect(text).not.toContain("0.03");
+  });
+
+  it("keeps the projected route when the basemap is off", async () => {
+    const card = await showList("drives", {
+      page: 1,
+      per_page: 10,
+      total: 1,
+      data: [
+        {
+          id: 7,
+          start_at: "2026-11-09T08:00:00Z",
+          end_at: "2026-11-09T08:30:00Z",
+          distance_km: 18.4,
+          duration_s: 1800,
+          energy_used_kwh: 3.2,
+          start_address: "Maison",
+          end_address: "Bureau",
+        },
+      ],
+    });
+    card.setConfig({ entity: "sensor.tesla_location", show_basemap: false });
+    const state = card as unknown as { _view: string; _detail?: unknown };
+    state._view = "drive";
+    state._detail = {
+      id: 7,
+      start_at: "2026-11-09T08:00:00Z",
+      route: [
+        { recorded_at: "2026-11-09T08:00:00Z", latitude: 0, longitude: 0 },
+        { recorded_at: "2026-11-09T08:30:00Z", latitude: 0.02, longitude: 0.03 },
+      ],
+      series: [],
+    };
+    card.requestUpdate();
+    await card.updateComplete;
+    expect(card.shadowRoot?.querySelector("[data-map='drive']")).toBeNull();
+    expect(card.shadowRoot?.querySelector("tl-mini-map.route")).toBeTruthy();
+    expect(flat(card.shadowRoot)).not.toContain("0.02");
   });
 });

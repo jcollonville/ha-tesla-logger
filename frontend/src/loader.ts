@@ -60,6 +60,7 @@ class TeslaLoggerCardShell extends HTMLElement {
     return {
       entity,
       show_map: true,
+      show_basemap: true,
       page_size: 10,
       show: {
         car: true,
