@@ -17,7 +17,7 @@ from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import Event, HomeAssistant, callback
 
-from .api import PNG_MAGIC, CarImageUpstream, TeslaLoggerApiError
+from .api import CarImageUpstream, TeslaLoggerApiError, png_is_complete
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,6 +72,13 @@ def _public(stored: _Stored) -> CachedCarImage:
     return CachedCarImage(stored.content, stored.etag, stored.missing, stored.fetched_at)
 
 
+def _usable(record: _Stored) -> bool:
+    """A negative cache has no bytes. An image cache must be a finished PNG."""
+    if record.missing:
+        return record.content is None
+    return record.content is not None and png_is_complete(record.content)
+
+
 class CarImageCache:
     """Memory plus disk cache. The fetch callback owns the bearer token."""
 
@@ -101,6 +108,10 @@ class CarImageCache:
             return CachedCarImage(None, None, True, self.now())
         async with self._lock(vehicle_id):
             record = self._memory.get(vehicle_id)
+            if record is not None and not _usable(record):
+                self._memory.pop(vehicle_id, None)
+                await asyncio.to_thread(self._discard, vehicle_id)
+                record = None
             if record is None:
                 record = await asyncio.to_thread(self._read, vehicle_id)
                 if record is not None:
@@ -134,7 +145,7 @@ class CarImageCache:
     ) -> _Stored | None:
         now = self.now()
         etag = _safe_etag(upstream.etag)
-        if upstream.kind == "image" and upstream.content and upstream.content.startswith(PNG_MAGIC):
+        if upstream.kind == "image" and upstream.content and png_is_complete(upstream.content):
             stored = _Stored(upstream.content, etag, False, now)
         elif upstream.kind == "not_modified" and record is not None and record.content:
             stored = _Stored(record.content, etag or record.etag, False, now)
@@ -179,10 +190,21 @@ class CarImageCache:
             try:
                 content = self._png_path(vehicle_id).read_bytes()
             except OSError:
+                self._discard(vehicle_id)
                 return None
-            if not content.startswith(PNG_MAGIC):
+            if not png_is_complete(content):
+                self._discard(vehicle_id)
                 return None
-        return _Stored(content, _safe_etag(etag), missing, float(fetched_at))
+        stored = _Stored(content, _safe_etag(etag), missing, float(fetched_at))
+        if not _usable(stored):
+            self._discard(vehicle_id)
+            return None
+        return stored
+
+    def _discard(self, vehicle_id: int) -> None:
+        """Delete a render and its sidecar. A bad cache must not be served again."""
+        self._png_path(vehicle_id).unlink(missing_ok=True)
+        self._meta_path(vehicle_id).unlink(missing_ok=True)
 
     def _write(self, vehicle_id: int, stored: _Stored) -> None:
         self._directory.mkdir(parents=True, exist_ok=True)

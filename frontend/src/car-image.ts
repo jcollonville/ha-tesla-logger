@@ -3,11 +3,6 @@ import type { HassEntity, HomeAssistant } from "./types";
 /** Signed image URLs stay valid long enough for a dashboard to load the PNG. */
 export const CAR_IMAGE_SIGN_SECONDS = 3600;
 
-/** Omitted means the official render is shown. */
-export function officialImageEnabled(config: { official_image?: boolean } | undefined): boolean {
-  return config?.official_image !== false;
-}
-
 function entryIdOf(value: unknown): string | null {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) {
     return null;

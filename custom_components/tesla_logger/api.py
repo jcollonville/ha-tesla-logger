@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 from urllib.parse import urlparse, urlunparse
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
@@ -16,7 +16,71 @@ _LOGGER = logging.getLogger(__name__)
 _TIMEOUT = ClientTimeout(total=20)
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 MAX_CAR_IMAGE_BYTES = 8 * 1024 * 1024
+_PNG_CHUNK_HEADER = 8
+_PNG_CHUNK_CRC = 4
 CarImageKind = Literal["image", "not_modified", "missing", "unavailable"]
+
+
+class _BodyReader(Protocol):
+    """The subset of aiohttp's StreamReader used to pull a response body."""
+
+    async def read(self, n: int = -1) -> bytes: ...
+
+
+def png_is_complete(data: bytes) -> bool:
+    """Return True when `data` is a PNG that ends on an in-bounds IEND chunk.
+
+    A truncated download still starts with the PNG signature. Walking each
+    chunk length is what rejects a cut-off IDAT instead of caching it.
+    """
+    if not data.startswith(PNG_MAGIC):
+        return False
+    offset = len(PNG_MAGIC)
+    size = len(data)
+    first = True
+    while offset < size:
+        if offset + _PNG_CHUNK_HEADER + _PNG_CHUNK_CRC > size:
+            return False
+        length = int.from_bytes(data[offset : offset + 4], "big")
+        kind = data[offset + 4 : offset + _PNG_CHUNK_HEADER]
+        chunk_end = offset + _PNG_CHUNK_HEADER + length + _PNG_CHUNK_CRC
+        if chunk_end > size:
+            return False
+        if first and kind != b"IHDR":
+            return False
+        first = False
+        if kind == b"IEND":
+            return length == 0 and chunk_end == size
+        offset = chunk_end
+    return False
+
+
+async def read_bounded_body(
+    stream: _BodyReader,
+    declared: int | None,
+    limit: int,
+) -> bytes | None:
+    """Read a response body until EOF, refusing anything past `limit`.
+
+    `StreamReader.read(n)` returns whatever is already buffered, not `n` bytes
+    and not the rest of the body. Callers have to keep reading until EOF.
+    `declared` is the Content-Length when the server sent one.
+    """
+    if declared is not None and declared > limit:
+        return None
+    chunks: list[bytes] = []
+    total = 0
+    while declared is None or total < declared:
+        block = await stream.read(64 * 1024)
+        if not block:
+            break
+        total += len(block)
+        if total > limit:
+            return None
+        chunks.append(block)
+    if declared is not None and total != declared:
+        return None
+    return b"".join(chunks)
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,9 +361,13 @@ class TeslaLoggerApi:
                 if "image/png" not in content_type.lower():
                     _LOGGER.debug("GET %s returned an unexpected content type", path)
                     return CarImageUpstream("unavailable")
-                body = await response.content.read(MAX_CAR_IMAGE_BYTES + 1)
-                if len(body) > MAX_CAR_IMAGE_BYTES or not body.startswith(PNG_MAGIC):
-                    _LOGGER.debug("GET %s returned an invalid PNG", path)
+                body = await read_bounded_body(
+                    response.content,
+                    response.content_length,
+                    MAX_CAR_IMAGE_BYTES,
+                )
+                if body is None or not png_is_complete(body):
+                    _LOGGER.debug("GET %s returned an incomplete car image", path)
                     return CarImageUpstream("unavailable")
                 return CarImageUpstream("image", content=body, etag=response.headers.get("ETag"))
         except TeslaLoggerApiError:

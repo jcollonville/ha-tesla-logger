@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import struct
 import zlib
 from typing import Any
@@ -33,6 +34,36 @@ def placeholder_png(color: tuple[int, int, int] = (20, 90, 180)) -> bytes:
     )
 
 
+def synthetic_png(color: tuple[int, int, int] = (20, 90, 180), size: int = 24) -> bytes:
+    """Return a generated RGB PNG with ancillary chunks. It is not Tesla artwork."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    row = b"\x00" + bytes(color) * size
+    header = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"gAMA", struct.pack(">I", 45455))
+        + chunk(b"cHRM", struct.pack(">8I", 31270, 32900, 64000, 33000, 30000, 60000, 15000, 6000))
+        + chunk(b"bKGD", struct.pack(">HHH", 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(row * size, level=0))
+        + chunk(b"IEND", b"")
+    )
+
+
+def truncated_idat(png: bytes, declared: int = 32768, kept: int = 32) -> bytes:
+    """Cut a PNG inside IDAT, leaving a length that does not fit in the buffer."""
+    marker = png.index(b"IDAT")
+    return png[: marker - 4] + struct.pack(">I", declared) + b"IDAT" + (b"\x00" * kept)
+
+
 class FakeState:
     """Mutable server state."""
 
@@ -53,6 +84,8 @@ class FakeState:
         self.car_png: bytes | None = None
         self.car_etag = '"render-1"'
         self.car_down = False
+        self.car_chunk_size: int | None = None
+        self.car_content_length: int | None = None
         self.car_requests: list[dict[str, str | None]] = []
 
     def vehicle(self) -> dict[str, Any]:
@@ -238,6 +271,36 @@ class FakeState:
         }
 
 
+async def _stream_png(request: web.Request, body: bytes, state: FakeState) -> web.StreamResponse:
+    """Send a PNG in small writes so a single StreamReader.read(n) cannot see it all."""
+    declared = len(body) if state.car_content_length is None else state.car_content_length
+    headers = {
+        "ETag": state.car_etag,
+        "Cache-Control": "public, max-age=86400",
+        "Content-Length": str(declared),
+    }
+    response = web.StreamResponse(status=200, headers=headers)
+    response.content_type = "image/png"
+    await response.prepare(request)
+    step = state.car_chunk_size or len(body)
+    try:
+        await response.write(body[:step])
+        # Yield so the client can observe the first buffer before the rest is written.
+        for _ in range(8):
+            await asyncio.sleep(0)
+        for offset in range(step, len(body), step):
+            await response.write(body[offset : offset + step])
+            await asyncio.sleep(0)
+        if declared != len(body):
+            if request.transport is not None:
+                request.transport.close()
+            return response
+        await response.write_eof()
+    except (ConnectionError, RuntimeError):
+        return response
+    return response
+
+
 def make_app(state: FakeState) -> web.Application:
     """Build the fake API."""
 
@@ -360,6 +423,8 @@ def make_app(state: FakeState) -> web.Application:
         headers = {"ETag": state.car_etag, "Cache-Control": "public, max-age=86400"}
         if request.headers.get("If-None-Match") == state.car_etag:
             return web.Response(status=304, headers=headers)
+        if state.car_chunk_size or state.car_content_length is not None:
+            return await _stream_png(request, state.car_png, state)
         return web.Response(body=state.car_png, content_type="image/png", headers=headers)
 
     async def geofences(request: web.Request) -> web.Response:

@@ -109,7 +109,6 @@ export class TeslaLoggerCardEditor extends LitElement {
     this._config = {
       ...config,
       show_map: config.show_map !== false,
-      official_image: config.official_image !== false,
       page_size: pageSize(config),
       show,
       drive_detail: driveDetailFlags(config),
@@ -165,12 +164,6 @@ export class TeslaLoggerCardEditor extends LitElement {
           <div class="grid">
             ${this.check(text.showMap, this._config.show_map !== false, (checked) =>
               this.commit({ show_map: checked }),
-            )}
-            ${this.check(
-              text.officialImage,
-              this._config.official_image !== false,
-              (checked) => this.commit({ official_image: checked }),
-              "official_image",
             )}
             ${SECTION_KEYS.map((key) =>
               this.check(text.showFields[key], show[key], (checked) => this.patchShow(key, checked)),
@@ -282,7 +275,6 @@ export class TeslaLoggerCardEditor extends LitElement {
       }),
       page_size: pageSize({ entity: this._config.entity, page_size: patch.page_size ?? this._config.page_size }),
       show_map: patch.show_map ?? this._config.show_map !== false,
-      official_image: patch.official_image ?? this._config.official_image !== false,
     };
     delete (next as { show_charts?: unknown }).show_charts;
     this._config = next;

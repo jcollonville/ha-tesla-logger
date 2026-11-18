@@ -1,8 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { TeslaLoggerCardEditor } from "./card-editor";
-import { carDrawing } from "./car-art";
-import { carImageTarget, officialImageEnabled, signedCarImageUrl } from "./car-image";
+import { carImageTarget, signedCarImageUrl } from "./car-image";
 import {
   brushSpan,
   bucketLabel,
@@ -283,12 +282,6 @@ export class TeslaLoggerCard extends LitElement {
       .car-stage {
         margin: 8px -8px 0;
       }
-      svg.car {
-        display: block;
-        width: 100%;
-        height: auto;
-        aspect-ratio: 400 / 160;
-      }
       img.car {
         display: block;
         width: min(100%, 560px);
@@ -297,11 +290,22 @@ export class TeslaLoggerCard extends LitElement {
         object-fit: contain;
         object-position: center bottom;
       }
-      .car-floor {
-        opacity: 0.85;
-      }
-      ha-card.dark .car-floor {
-        opacity: 1;
+      .car-missing {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        width: min(100%, 560px);
+        min-height: 88px;
+        margin: 12px auto 0;
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--tl-muted, #6b7280) 12%, transparent);
+        color: var(--tl-muted, #6b7280);
+        font-size: 0.82rem;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        text-align: center;
       }
       .map-only-spacer {
         height: 72px;
@@ -1281,7 +1285,6 @@ export class TeslaLoggerCard extends LitElement {
     }
     const activity = this.label("activity") || "";
     const deviceName = this.deviceId ? this.hass?.devices?.[this.deviceId]?.name : undefined;
-    const model = this.deviceId ? this.hass?.devices?.[this.deviceId]?.model : undefined;
     const friendly = this.hass?.states[this._config?.entity || ""]?.attributes.friendly_name;
     const name = deviceName || (typeof friendly === "string" ? friendly : this.text.unknown);
     const fence = this.label("geofence");
@@ -1306,11 +1309,7 @@ export class TeslaLoggerCard extends LitElement {
           ${showMap ? this.watermark() : nothing}
           ${showCar ? identity : html`<div class="map-only-spacer"></div>`}
         </div>
-        ${showCar
-          ? html`<div class="car-stage">
-              ${this.carArt(typeof model === "string" ? model : undefined)}
-            </div>`
-          : nothing}
+        ${showCar ? html`<div class="car-stage">${this.carPicture()}</div>` : nothing}
       </div>
     `;
   }
@@ -1319,8 +1318,8 @@ export class TeslaLoggerCard extends LitElement {
     return this._config?.show_map !== false;
   }
 
-  private carArt(model: string | undefined) {
-    if (officialImageEnabled(this._config) && this._carImageUrl && !this._carImageFailed) {
+  private carPicture() {
+    if (this._carImageUrl && !this._carImageFailed) {
       return html`<img
         class="car official"
         alt=${this.text.car}
@@ -1328,7 +1327,10 @@ export class TeslaLoggerCard extends LitElement {
         @error=${() => this.failCarImage()}
       />`;
     }
-    return carDrawing(model, this.text.car);
+    if (this._carImageFailed) {
+      return html`<p class="car-missing" role="status">${this.text.carImageUnavailable}</p>`;
+    }
+    return html`<div class="car-missing" aria-busy="true"></div>`;
   }
 
   private failCarImage(): void {
@@ -1336,14 +1338,22 @@ export class TeslaLoggerCard extends LitElement {
   }
 
   private async ensureCarImage(): Promise<void> {
-    const show = this.flags.car && officialImageEnabled(this._config);
+    const show = this.flags.car;
     const target = show ? carImageTarget(this.readings.values()) : null;
     const key = target ? `${target.entryId}:${target.vehicleId}` : "";
-    if (!show || !target) {
+    if (!show) {
       if (this._carImageKey || this._carImageUrl || this._carImageFailed) {
         this._carImageKey = "";
         this._carImageUrl = "";
         this._carImageFailed = false;
+      }
+      return;
+    }
+    if (!target) {
+      if (this._carImageKey || this._carImageUrl || !this._carImageFailed) {
+        this._carImageKey = "";
+        this._carImageUrl = "";
+        this._carImageFailed = true;
       }
       return;
     }

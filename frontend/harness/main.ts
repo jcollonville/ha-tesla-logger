@@ -643,8 +643,7 @@ async function settle(): Promise<void> {
                 : view === "charts"
                   ? Boolean(root?.querySelector(".series-chart"))
                   : view === "drive"
-                    ? Boolean(root?.querySelector("svg.car")) &&
-                      Boolean(root?.querySelector(".leaflet-container") || root?.querySelector(".map"))
+                    ? Boolean(root?.querySelector(".leaflet-container") || root?.querySelector(".map"))
                     : view === "charge"
                       ? Boolean(root?.querySelector(".series-chart"))
                       : true);

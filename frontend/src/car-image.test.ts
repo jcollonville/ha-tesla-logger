@@ -4,7 +4,6 @@ import {
   CAR_IMAGE_SIGN_SECONDS,
   carImagePath,
   carImageTarget,
-  officialImageEnabled,
   signedCarImageUrl,
   vehicleIdOf,
 } from "./car-image";
@@ -23,8 +22,6 @@ describe("car image url", () => {
       ]),
     ).toEqual({ entryId: "entry-1", vehicleId: 7 });
     expect(carImagePath("entry-1", 7)).toBe("/api/tesla_logger/entry-1/7/car.png");
-    expect(officialImageEnabled(undefined)).toBe(true);
-    expect(officialImageEnabled({ official_image: false })).toBe(false);
   });
 
   it("asks Home Assistant to sign the same-origin path", async () => {

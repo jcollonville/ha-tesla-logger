@@ -798,13 +798,18 @@ describe("status groups", () => {
     card.hass = hass;
     card.setConfig({ entity: "sensor.tesla_location" });
     await card.updateComplete;
+    await vi.waitFor(() => {
+      expect(card.shadowRoot?.textContent).toContain("Image du véhicule indisponible");
+    });
     const hero = Array.from(card.shadowRoot?.querySelectorAll(".status-hero .metric strong") ?? []).map(
       (node) => node.textContent,
     );
     expect(hero).toEqual(["72 %", "328 km"]);
     expect(card.shadowRoot?.textContent).toContain("Déplacement");
     expect(card.shadowRoot?.textContent).toContain("Habitacle");
-    expect(card.shadowRoot?.querySelector("svg.car")).toBeTruthy();
+    expect(card.shadowRoot?.querySelector("svg.car")).toBeNull();
+    expect(card.shadowRoot?.querySelector("img.car")).toBeNull();
+    expect(card.shadowRoot?.textContent).toContain("Image du véhicule indisponible");
     expect(card.shadowRoot?.querySelector(".ring")).toBeNull();
     expect(card.shadowRoot?.querySelector(".header")?.textContent).not.toContain("328");
     expect(card.shadowRoot?.textContent).not.toContain("Chargeur");
@@ -824,8 +829,12 @@ describe("status groups", () => {
     card.hass = hass;
     card.setConfig({ entity: "sensor.tesla_location" });
     await card.updateComplete;
+    await vi.waitFor(() => {
+      expect(card.shadowRoot?.textContent).toContain("Vehicle image unavailable");
+    });
     expect(card.shadowRoot?.textContent).toContain("Driving");
     expect(card.shadowRoot?.textContent).toContain("Cabin");
+    expect(card.shadowRoot?.textContent).toContain("Vehicle image unavailable");
     expect(card.shadowRoot?.textContent).not.toContain("Déplacement");
   });
 });
@@ -912,24 +921,23 @@ describe("editor schema", () => {
     expect(config?.drive_detail?.distance).toBe(true);
   });
 
-  it("turns the official image off from the Image officielle toggle", async () => {
+  it("does not offer an official image toggle and keeps a stored key", async () => {
     const editor = new TeslaLoggerCardEditor();
     mounted.push(editor as unknown as TeslaLoggerCard);
     document.body.append(editor);
     editor.hass = frenchHass();
-    editor.setConfig({ entity: "sensor.tesla_location" });
+    editor.setConfig({ entity: "sensor.tesla_location", official_image: false });
     await editor.updateComplete;
-    const input = editor.shadowRoot?.querySelector(
-      "[data-field='official_image']",
-    ) as HTMLInputElement | null;
-    expect(input?.checked).toBe(true);
-    expect(editor.shadowRoot?.textContent).toContain("Image officielle");
-    if (input) {
-      input.checked = false;
-      input.dispatchEvent(new Event("change"));
+    expect(editor.shadowRoot?.querySelector("[data-field='official_image']")).toBeNull();
+    expect(editor.shadowRoot?.textContent).not.toContain("Image officielle");
+    const page = editor.shadowRoot?.querySelector("[data-field='page_size']") as HTMLInputElement | null;
+    if (page) {
+      page.value = "12";
+      page.dispatchEvent(new Event("change"));
     }
     const config = (editor as unknown as { _config?: CardConfig })._config;
     expect(config?.official_image).toBe(false);
+    expect(config?.page_size).toBe(12);
   });
 });
 
@@ -970,7 +978,7 @@ describe("official car image", () => {
     return card;
   }
 
-  it("loads the signed Home Assistant url and hides the SVG", async () => {
+  it("loads the signed Home Assistant url and does not draw an SVG", async () => {
     const { hass, callWS } = withImage(PLACEHOLDER_PNG);
     const card = await mount(hass);
     await vi.waitFor(() => {
@@ -978,6 +986,7 @@ describe("official car image", () => {
       expect(image?.getAttribute("src")).toBe(PLACEHOLDER_PNG);
     });
     expect(card.shadowRoot?.querySelector("svg.car")).toBeNull();
+    expect(card.shadowRoot?.textContent).not.toContain("Image du véhicule indisponible");
     expect(callWS).toHaveBeenCalledWith({
       type: "auth/sign_path",
       path: "/api/tesla_logger/entry-1/7/car.png",
@@ -986,23 +995,27 @@ describe("official car image", () => {
     expect(JSON.stringify(callWS.mock.calls)).not.toContain("5YJTEST");
   });
 
-  it("falls back to the SVG when the image fails or the toggle is off", async () => {
+  it("shows a muted message when the image fails, and ignores official_image: false", async () => {
     const { hass, callWS } = withImage("http://127.0.0.1:9/missing.png");
     const card = await mount(hass);
     await vi.waitFor(() => {
       expect(card.shadowRoot?.querySelector("img.car.official")).toBeTruthy();
     });
-    card.shadowRoot
-      ?.querySelector("img.car.official")
-      ?.dispatchEvent(new Event("error"));
+    card.shadowRoot?.querySelector("img.car.official")?.dispatchEvent(new Event("error"));
     await card.updateComplete;
-    expect(card.shadowRoot?.querySelector("svg.car")).toBeTruthy();
+    expect(card.shadowRoot?.querySelector("svg.car")).toBeNull();
     expect(card.shadowRoot?.querySelector("img.car.official")).toBeNull();
+    const missing = card.shadowRoot?.querySelector(".car-missing");
+    expect(missing?.textContent).toBe("Image du véhicule indisponible");
 
-    const hidden = await mount(hass, false);
-    await hidden.updateComplete;
-    expect(hidden.shadowRoot?.querySelector("svg.car")).toBeTruthy();
-    expect(callWS).toHaveBeenCalledTimes(1);
+    const stillOn = await mount(hass, false);
+    await vi.waitFor(() => {
+      expect(stillOn.shadowRoot?.querySelector("img.car.official")?.getAttribute("src")).toBe(
+        "http://127.0.0.1:9/missing.png",
+      );
+    });
+    expect(stillOn.shadowRoot?.querySelector("svg.car")).toBeNull();
+    expect(callWS).toHaveBeenCalledTimes(2);
   });
 });
 
