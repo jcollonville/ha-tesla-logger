@@ -86,9 +86,13 @@ export function seriesNeeded(show: ShowFlags): boolean {
   );
 }
 
-export function visibleViews(show: ShowFlags): Array<Exclude<ViewName, "drive" | "charge">> {
-  const views: Array<Exclude<ViewName, "drive" | "charge">> = [];
-  if (show.status) {
+/** Tabs that mirror the console. Charts live on Stats. `showMap` keeps Aperçu. */
+export function visibleViews(
+  show: ShowFlags,
+  showMap = true,
+): Array<Exclude<ViewName, "drive" | "charge" | "charts">> {
+  const views: Array<Exclude<ViewName, "drive" | "charge" | "charts">> = [];
+  if (show.car || show.status || showMap) {
     views.push("status");
   }
   if (show.drives) {
@@ -97,27 +101,26 @@ export function visibleViews(show: ShowFlags): Array<Exclude<ViewName, "drive" |
   if (show.charges) {
     views.push("charges");
   }
-  if (show.stats) {
+  if (show.stats || chartsVisible(show)) {
     views.push("stats");
-  }
-  if (chartsVisible(show)) {
-    views.push("charts");
   }
   return views;
 }
 
-export function fallbackView(view: ViewName, show: ShowFlags): ViewName {
+export function fallbackView(view: ViewName, show: ShowFlags, showMap = true): ViewName {
+  const views = visibleViews(show, showMap);
   if (view === "drive") {
-    return show.drives ? view : (visibleViews(show)[0] ?? "status");
+    return show.drives ? view : (views[0] ?? "status");
   }
   if (view === "charge") {
-    return show.charges ? view : (visibleViews(show)[0] ?? "status");
+    return show.charges ? view : (views[0] ?? "status");
   }
-  if (view === "stats") {
-    return show.stats ? view : (visibleViews(show)[0] ?? "status");
+  const normalized = view === "charts" ? "stats" : view;
+  if (normalized === "stats") {
+    return show.stats || chartsVisible(show) ? "stats" : (views[0] ?? "status");
   }
-  if (visibleViews(show).includes(view)) {
-    return view;
+  if (views.includes(normalized)) {
+    return normalized;
   }
-  return visibleViews(show)[0] ?? "status";
+  return views[0] ?? "status";
 }

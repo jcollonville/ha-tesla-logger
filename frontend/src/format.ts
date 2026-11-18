@@ -129,6 +129,24 @@ function calendarDay(date: Date, prefs: DatePrefs): string {
   return `${pick("year")}-${pick("month")}-${pick("day")}`;
 }
 
+/** Clock for one instant, using the Home Assistant locale, hour cycle, and zone. */
+export function formatClock(value: string, prefs: Lang | DatePrefs): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return formatTimePart(date, datePrefs(prefs));
+}
+
+/** Day heading for a list group, using the Home Assistant locale and zone. */
+export function formatDayHeading(value: string, prefs: Lang | DatePrefs): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return formatDatePart(date, datePrefs(prefs));
+}
+
 /** Compact list timestamp, e.g. "mar. 10 nov., 15:14" or "Tue, Nov 10, 3:14 PM". */
 export function formatListTimestamp(value: string, prefs: Lang | DatePrefs): string {
   const date = new Date(value);

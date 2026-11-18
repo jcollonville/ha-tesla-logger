@@ -1,20 +1,22 @@
 {
   "name": "tesla-logger-card",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
+    "verify-ui": "node scripts/verify-ui.mjs",
+    "prebuild": "node scripts/verify-ui.mjs",
+    "pretest": "node scripts/verify-ui.mjs",
     "build": "vite build",
     "lint": "eslint src",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "leaflet": "1.9.4",
+    "@jcollonville/tesla-logger-ui": "file:vendor/jcollonville-tesla-logger-ui-0.1.0.tgz",
     "lit": "3.2.1"
   },
   "devDependencies": {
-    "@types/leaflet": "1.9.15",
     "eslint": "9.16.0",
     "happy-dom": "21.0.4",
     "typescript": "5.7.2",

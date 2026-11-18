@@ -369,7 +369,7 @@ const DETAIL = {
   ...DRIVES[2],
   route: [
     { recorded_at: DRIVES[2].start_at, latitude: 0, longitude: 0 },
-    { recorded_at: DRIVES[2].end_at, latitude: 0, longitude: 0 },
+    { recorded_at: DRIVES[2].end_at, latitude: 0.02, longitude: 0.03 },
   ],
   series: [0, 20, 45, 70, 88, 90, 60, 30, 12, 0].map((speed, index) => ({
     recorded_at: new Date(Date.parse(DRIVES[2].start_at) + index * 12 * 60 * 1000).toISOString(),
@@ -390,45 +390,15 @@ function pageOf<T>(rows: T[], requested: number, page: number) {
   };
 }
 
+const SEEN_AT = new Date(Date.now() - 12 * 60 * 1000).toISOString();
+
 function sensor(key: string, state: string | number) {
   return {
     id: `sensor.${key}`,
     state: String(state),
+    last_updated: SEEN_AT,
     attributes: { key, vin: "TEST", vehicle_id: 1, config_entry_id: "entry-1" },
   };
-}
-
-/** Geometric stand-in drawn in the browser. It is not a Tesla render. */
-function placeholderCar(): string {
-  const canvas = document.createElement("canvas");
-  canvas.width = 640;
-  canvas.height = 280;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return "";
-  }
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#d7dde6";
-  context.fillRect(70, 120, 500, 90);
-  context.fillStyle = "#8ea0b8";
-  context.beginPath();
-  context.moveTo(230, 120);
-  context.lineTo(300, 62);
-  context.lineTo(430, 62);
-  context.lineTo(500, 120);
-  context.closePath();
-  context.fill();
-  context.fillStyle = "#2c3138";
-  context.beginPath();
-  context.arc(190, 210, 38, 0, Math.PI * 2);
-  context.arc(470, 210, 38, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = "#f4f1ea";
-  context.beginPath();
-  context.arc(190, 210, 16, 0, Math.PI * 2);
-  context.arc(470, 210, 16, 0, Math.PI * 2);
-  context.fill();
-  return canvas.toDataURL("image/png");
 }
 
 const readings = [
@@ -459,11 +429,13 @@ const states: HomeAssistant["states"] = {
   },
   "device_tracker.car": {
     state: "home",
+    last_updated: SEEN_AT,
     attributes: {
       key: "location",
       vin: "TEST",
       latitude: 0,
       longitude: 0,
+      address: "Allée des tilleuls",
       vehicle_id: 1,
       config_entry_id: "entry-1",
     },
@@ -492,7 +464,7 @@ const hass = {
     }
     return { path: `${path}?authSig=harness` };
   },
-  hassUrl: (path?: string) => (path?.includes("/car.png") ? placeholderCar() : (path ?? "")),
+  hassUrl: () => "",
   callService: async (_domain: string, service: string, data?: Record<string, unknown>) => {
     const requested = Number(data?.per_page ?? 20);
     const page = Number(data?.page ?? 1);
@@ -614,9 +586,25 @@ if (view === "drive") {
 }
 
 if (view === "charge") {
-  const state = card as unknown as { _chargeId?: number; _view: string; _charges?: unknown };
+  const state = card as unknown as { _chargeId?: number; _charge?: unknown; _view: string };
   state._chargeId = 10;
+  state._charge = CHARGES[9];
   state._view = "charge";
+}
+
+function has(root: ParentNode | null | undefined, selector: string): boolean {
+  if (!root) {
+    return false;
+  }
+  if (root.querySelector(selector)) {
+    return true;
+  }
+  for (const node of root.querySelectorAll("*")) {
+    if (node.shadowRoot && has(node.shadowRoot, selector)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function settle(): Promise<void> {
@@ -626,26 +614,22 @@ async function settle(): Promise<void> {
     const root = card.shadowRoot;
     const text = root?.textContent ?? "";
     const loading = text.includes("Chargement") || text.includes("Loading");
-    const entries = root?.querySelectorAll(".entry").length ?? 0;
-    const metrics = root?.querySelectorAll(".metric").length ?? 0;
     const ready =
       view === "editor"
         ? Boolean(editor.shadowRoot?.querySelector(".editor input, .editor ha-entity-picker"))
         : !loading &&
-          ((view === "drives" || view === "charges") && entries > 0
-            ? true
-            : view === "status"
-              ? metrics > 0 &&
-                Boolean(root?.querySelector(".map-dot")) &&
-                Boolean((root?.querySelector("img.car.official") as HTMLImageElement | null)?.naturalWidth)
-              : view === "stats"
-                ? metrics > 0
-                : view === "charts"
-                  ? Boolean(root?.querySelector(".series-chart"))
+          (view === "drives"
+            ? has(root, "tl-drive-row")
+            : view === "charges"
+              ? has(root, "tl-charge-row")
+              : view === "status"
+                ? has(root, "tl-vehicle-card") && has(root, "tl-mini-map")
+                : view === "stats" || view === "charts"
+                  ? has(root, "tl-chart")
                   : view === "drive"
-                    ? Boolean(root?.querySelector(".leaflet-container") || root?.querySelector(".map"))
+                    ? has(root, "tl-chart")
                     : view === "charge"
-                      ? Boolean(root?.querySelector(".series-chart"))
+                      ? has(root, "tl-summary-strip")
                       : true);
     if (ready) {
       await new Promise((resolve) => setTimeout(resolve, 250));

@@ -12,7 +12,14 @@ import { copy, language, type Copy } from "./i18n";
 import { CHART_SHOW_KEYS, SECTION_KEYS, showFlags, type ShowKey } from "./show-config";
 import type { CardConfig, HomeAssistant } from "./types";
 
-const VIEWS = ["status", "drives", "charges", "stats", "charts"] as const;
+const VIEWS = ["status", "drives", "charges", "stats"] as const;
+
+const VIEW_LABEL = {
+  status: "overview",
+  drives: "drives",
+  charges: "charges",
+  stats: "stats",
+} as const;
 
 /**
  * Visual editor for the Lovelace card. It does not depend on `ha-form`, so the
@@ -108,6 +115,7 @@ export class TeslaLoggerCardEditor extends LitElement {
     const show = showFlags(config);
     this._config = {
       ...config,
+      default_view: config.default_view === "charts" ? "stats" : config.default_view,
       show_map: config.show_map !== false,
       page_size: pageSize(config),
       show,
@@ -132,7 +140,6 @@ export class TeslaLoggerCardEditor extends LitElement {
             ${text.defaultView}
             <select
               data-field="default_view"
-              .value=${this._config.default_view || "status"}
               @change=${(event: Event) =>
                 this.commit({
                   default_view: (event.target as HTMLSelectElement).value as (typeof VIEWS)[number],
@@ -140,7 +147,7 @@ export class TeslaLoggerCardEditor extends LitElement {
             >
               ${VIEWS.map(
                 (view) => html`<option value=${view} ?selected=${(this._config?.default_view || "status") === view}>
-                  ${text[view]}
+                  ${text[VIEW_LABEL[view]]}
                 </option>`,
               )}
             </select>

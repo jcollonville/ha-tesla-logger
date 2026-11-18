@@ -54,7 +54,7 @@ function versionedPrecompressedChunks(): Plugin {
           continue;
         }
         const file = join(outDir, name);
-        // ES library builds keep whitespace. Minify again so Leaflet stays small.
+        // ES library builds keep whitespace. Minify again so the card stays small.
         const minified = transformSync(readFileSync(file, "utf8"), {
           minify: true,
           legalComments: "none",
@@ -103,8 +103,8 @@ export default defineConfig({
         entryFileNames: "tesla-logger-card.js",
         chunkFileNames: "[name]-[hash].js",
         manualChunks(id) {
-          if (id.includes("/leaflet-map") || id.includes("node_modules/leaflet")) {
-            return "leaflet";
+          if (id.includes("tesla-logger-ui")) {
+            return "tesla-logger-ui";
           }
         },
       },
