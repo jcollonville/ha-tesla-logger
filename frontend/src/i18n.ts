@@ -92,7 +92,7 @@ const EN = {
   entity: "Entity",
   defaultView: "Default view",
   showMap: "Map",
-  officialImage: "Official image",
+  carImageUnavailable: "Vehicle image unavailable",
   showBlocks: "Blocks",
   detailFields: {
     distance: "Distance",
@@ -221,7 +221,7 @@ const FR: typeof EN = {
   entity: "Entité",
   defaultView: "Vue par défaut",
   showMap: "Carte",
-  officialImage: "Image officielle",
+  carImageUnavailable: "Image du véhicule indisponible",
   showBlocks: "Blocs",
   detailFields: {
     distance: "Distance",

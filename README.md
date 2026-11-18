@@ -140,11 +140,11 @@ Omitted keys stay visible, and `page_size` defaults to 10. Existing configs that
 
 `show_map` defaults to true. The header hides raw coordinates. When the vehicle device tracker has a latitude and longitude, it shows a faint, desaturated, non-interactive OpenStreetMap centered on the car, with a small red dot. Set `show_map: false` to hide it. The card requests only the tiles visible in that header, at zoom 15, from `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. Range stays in Status, beside battery, not under the car name.
 
-The car card draws the same side-profile fallback as the Tesla Logger console. The official render is not requested: the server only serves it on the session route `/v/{id}/car.png`, and an `<img>` cannot send the integration token. A token route the card could use, once it exists, is `GET /api/v1/vehicles/{vehicle_id}/car.png` with `Authorization: Bearer` and `image/png`, where `{vehicle_id}` is the numeric vehicle id and never a VIN. The card would still need a same-origin Home Assistant proxy, because the Lovelace image cannot attach that header.
+The header shows the official car render from Home Assistant at `/api/tesla_logger/{entry_id}/{vehicle_id}/car.png`. The card asks Home Assistant to sign that same-origin path; the image request does not carry the server token or a VIN. `{vehicle_id}` is the numeric vehicle id. An older `official_image` key in the card YAML is ignored, and the visual editor does not offer that toggle. If the view returns 404 or 503, or the image fails to load, the card shows a short localized line (“Vehicle image unavailable” / “Image du véhicule indisponible”) in a muted area. It does not draw a fallback car.
 
 The card has five views:
 
-- Status: car drawing, activity, geofence name, and the main readings. Battery and range sit together in Status. The position map stays in the header when coordinates are known
+- Status: official car image, activity, geofence name, and the main readings. Battery and range sit together in Status. The position map stays in the header when coordinates are known
 - Drives: day groups, start and end addresses, distance, duration, and consumption, with a detail view
 - Drive detail: Leaflet map (OpenStreetMap tiles) of the RDP route, plus speed, power, elevation, and battery charts. Hovering one chart moves the others. Drag a chart to zoom
 - Charges, with the same day groups, and a detail view for energy, duration, state of charge, power, AC/DC, voltage, cost, and a charge curve when the payload includes one

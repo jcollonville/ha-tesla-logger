@@ -32,6 +32,7 @@ describe("card language", () => {
     expect(fr.defaultView).toBe("Vue par défaut");
     expect(fr.back).toBe("Retour");
     expect(fr.perDay).toBe("km/j");
+    expect(fr.carImageUnavailable).toBe("Image du véhicule indisponible");
 
     const en = copy(language("de"));
     expect(en.drivingGroup).toBe("Driving");
@@ -41,5 +42,6 @@ describe("card language", () => {
     expect(en.stats).toBe("Stats");
     expect(en.emptyDrives).toBe("No drives in this page.");
     expect(en.perDay).toBe("km/day");
+    expect(en.carImageUnavailable).toBe("Vehicle image unavailable");
   });
 });

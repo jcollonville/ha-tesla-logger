@@ -51,7 +51,7 @@ export interface CardConfig {
   default_view?: ViewName;
   /** Faint position map in the header. Omitted means shown. */
   show_map?: boolean;
-  /** Official Tesla render. Omitted means shown. */
+  /** Ignored. Older YAML may still set this; the official render is always used. */
   official_image?: boolean;
   /** List page length. Omitted means 10. */
   page_size?: number;
