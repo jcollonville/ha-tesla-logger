@@ -91,7 +91,7 @@ response_variable: tesla_stats
 
 ## Lovelace card
 
-No dashboard resource is required. The integration serves `/tesla_logger/` and registers `tesla-logger-card.js` with `add_extra_js_url`. That file is a small loader. The card and Leaflet download only when a card is shown, and Home Assistant serves the precompressed `.gz` / `.br` siblings.
+No dashboard resource is required. The integration serves `/tesla_logger/` and registers `tesla-logger-card.js` with `add_extra_js_url`. That file is a small loader. The card, the shared console UI, and MapLibre download only when they are needed, and Home Assistant serves the precompressed `.gz` / `.br` siblings.
 
 Add a **Tesla Logger** card and pick any entity from the vehicle. Every block is shown unless `show` says otherwise. A tab disappears when all of its blocks are hidden, and hidden blocks are not requested from the server.
 
@@ -99,6 +99,7 @@ Add a **Tesla Logger** card and pick any entity from the vehicle. Every block is
 type: custom:tesla-logger-card
 entity: sensor.red_location
 show_map: true
+show_basemap: true
 page_size: 10
 show:
   car: true
@@ -140,7 +141,13 @@ Omitted keys stay visible, and `page_size` defaults to 10. Existing configs that
 
 The card is the Tesla Logger console, rendered with the vendored `@jcollonville/tesla-logger-ui` package (currently 0.1.0, MIT OR Apache-2.0). Home Assistant theme variables are mapped onto the `--tl-*` tokens, and the card passes `hass` locale and time zone into the elements. The script is bundled at build time. The browser never loads JavaScript from the Tesla Logger server.
 
-`show_map` defaults to true. The Aperçu place card is a discreet `tl-mini-map`: a dot and, when a drive detail includes a route, a projected path. Latitude and longitude stay in JavaScript properties and are not written into the DOM. The card does not request map tiles. Set `show_map: false` to hide the place card. An optional drive-detail map uses the same projected drawing. It does not call OpenStreetMap or any other tile host.
+`show_map` defaults to true. The Aperçu place card keeps the discreet `tl-mini-map` dot and, when coordinates are known, draws the basemap behind it. Filling the `tiles` slot makes `tl-mini-map` 0.1.0 repaint continuously, so the basemap is a layer in the same frame instead. Latitude and longitude stay in JavaScript properties and are not written into the DOM. Set `show_map: false` to hide the place card.
+
+`show_basemap` defaults to true. It draws the same OpenFreeMap styles as the Tesla Logger console: Positron in a light Home Assistant theme and Dark in a dark theme. Drive detail and charge detail (when the charge has a position) use an interactive MapLibre map with zoom and pan. Set `show_basemap: false` to keep the dot and, for a drive, the projected route, without requesting tiles. The credit on a basemap is © OpenMapTiles © OpenStreetMap contributors.
+
+The browser never calls a tile host. MapLibre asks only `/api/tesla_logger/map/…`. The integration proxies `https://tiles.openfreemap.org`, rewrites style and TileJSON URLs onto that path, and the card turns those paths into absolute URLs before handing the style to MapLibre (a root-relative sprite URL is rejected). Bodies are cached in `config/tesla_logger/map_cache` (at most 4000 files, 2 MB each, seven days for tiles, six hours for styles, `ETag` / `If-None-Match`, and the previous body if the upstream errors). Paths outside the two styles, their glyphs, sprites, and tiles are rejected.
+
+MapLibre fetches those files, so the card's `transformRequest` adds `Authorization: Bearer` from `hass.auth.data.access_token`. Home Assistant's view requires that header. A signed `auth/sign_path` URL is a poor fit: MapLibre chooses each `{z}/{x}/{y}` later, and a signature would expire while the map is open. The car image still uses `auth/sign_path` because an `<img>` cannot set a bearer header. The server token is not part of either request. MapLibre GL JS 5.24.0 (BSD-3-Clause, `www/maplibre-gl-LICENSE.txt`) is a separate chunk, loaded only when a basemap is shown.
 
 The vehicle card shows the official render from Home Assistant at `/api/tesla_logger/{entry_id}/{vehicle_id}/car.png`. The card asks Home Assistant to sign that same-origin path; the image request does not carry the server token or a VIN. `{vehicle_id}` is the numeric vehicle id. An older `official_image` key in the card YAML is ignored, and the visual editor does not offer that toggle. If the view returns 404 or 503, or the image fails to load, the card shows “Vehicle image unavailable” / “Image du véhicule indisponible”. It does not draw a fallback car.
 

@@ -1,6 +1,14 @@
 import { makeFormat, type ChartSeries, type FormatHooks, type VehicleCardData } from "@jcollonville/tesla-logger-ui";
 import { LitElement, css, html, nothing } from "lit";
 import { carImageTarget, signedCarImageUrl } from "./car-image";
+import {
+  BASEMAP_CREDIT,
+  accessToken,
+  releaseBasemap,
+  routeLngLats,
+  syncBasemap,
+  type BasemapSpec,
+} from "./basemap";
 import { TeslaLoggerCardEditor } from "./card-editor";
 import { chargeDetailFlags, driveDetailFlags, pageSize } from "./detail-config";
 import {
@@ -52,6 +60,31 @@ import type {
   TempBin,
   ViewName,
 } from "./types";
+
+installMiniMapGuard();
+
+/**
+ * The shared mini map rebuilds its slot on every paint. A filled slot is not
+ * assigned until after paint, so the component schedules another paint forever.
+ * Marking the slot filled after each paint keeps the basemap in the tiles slot.
+ */
+function installMiniMapGuard(): void {
+  const proto = customElements.get("tl-mini-map")?.prototype as
+    | { render?: () => void; _tiles?: boolean; _guard?: boolean }
+    | undefined;
+  if (!proto?.render || proto._guard) {
+    return;
+  }
+  proto._guard = true;
+  const render = proto.render;
+  proto.render = function renderOnce(this: { _tiles?: boolean; querySelector: (selector: string) => Element | null }) {
+    render.call(this);
+    this._tiles = true;
+    if (this.querySelector("[slot='tiles']")) {
+      (this as HTMLElement).classList.add("has-tiles");
+    }
+  };
+}
 
 const THEME_STYLE = [
   "--tl-bg:var(--tl-ha-bg)",
@@ -239,8 +272,47 @@ export class TeslaLoggerCard extends LitElement {
       background: var(--tl-surface);
     }
     .map-frame {
+      position: relative;
       overflow: hidden;
       background: var(--tl-ha-map);
+    }
+    .map-frame.detail {
+      border: 1px solid var(--tl-line);
+      border-radius: var(--tl-radius);
+    }
+    .basemap {
+      width: 100%;
+      height: 100%;
+    }
+    .basemap.interactive {
+      height: 320px;
+    }
+    .basemap.overview {
+      position: absolute;
+      inset: 0 0 auto;
+      height: 100%;
+      z-index: 0;
+    }
+    tl-mini-map.where {
+      position: relative;
+      z-index: 1;
+      display: block;
+      aspect-ratio: 360 / 220;
+      background: transparent;
+    }
+    .map-credit {
+      position: absolute;
+      right: 6px;
+      bottom: 4px;
+      z-index: 2;
+      margin: 0;
+      padding: 0 4px;
+      border-radius: 2px;
+      background: color-mix(in srgb, var(--tl-surface, #fff) 82%, transparent);
+      color: var(--tl-muted, #5c5e62);
+      font-size: 10px;
+      line-height: 1.4;
+      pointer-events: none;
     }
     .place-text {
       padding: 0 24px 24px;
@@ -401,6 +473,7 @@ export class TeslaLoggerCard extends LitElement {
     this.paintHosts();
     this.patchSharedShadows();
     this.syncPositionMap();
+    this.syncBasemaps();
     if (this._config) {
       void this.ensureView();
       void this.ensureCarImage();
@@ -446,6 +519,12 @@ export class TeslaLoggerCard extends LitElement {
       ],
       ["tl-recent-card", ":host .route.single .route-stop{padding-left:18px}"],
     ];
+    if (this.basemapOn()) {
+      patches.push([
+        "tl-mini-map",
+        ":host .map-stack{background:transparent}:host .map-bg,:host .map-dots,:host .map-vignette{display:none}",
+      ]);
+    }
     for (const [selector, cssText] of patches) {
       this.renderRoot.querySelectorAll(selector).forEach((node) => {
         const root = node.shadowRoot;
@@ -478,6 +557,68 @@ export class TeslaLoggerCard extends LitElement {
     if (map.heading !== heading) {
       map.heading = heading;
     }
+  }
+
+  override disconnectedCallback(): void {
+    for (const node of this._basemapNodes) {
+      releaseBasemap(node);
+    }
+    this._basemapNodes.clear();
+    super.disconnectedCallback();
+  }
+
+  private _basemapNodes = new Set<HTMLElement>();
+
+  private basemapOn(): boolean {
+    return this._config?.show_basemap !== false;
+  }
+
+  private syncBasemaps(): void {
+    const live = new Set(Array.from(this.renderRoot.querySelectorAll<HTMLElement>(".basemap")));
+    for (const node of this._basemapNodes) {
+      if (!live.has(node)) {
+        releaseBasemap(node);
+        this._basemapNodes.delete(node);
+      }
+    }
+    for (const node of live) {
+      this._basemapNodes.add(node);
+      const spec = this.basemapSpec(node.dataset.map || "");
+      if (spec) {
+        syncBasemap(node, spec);
+      } else {
+        releaseBasemap(node);
+      }
+    }
+  }
+
+  private basemapSpec(kind: string): BasemapSpec | null {
+    const origin = window.location.origin;
+    const token = accessToken(this.hass);
+    const dark = this.dark;
+    if (kind === "overview") {
+      const position = this.carPosition();
+      if (!position) {
+        return null;
+      }
+      return { dark, interactive: false, accessToken: token, origin, points: [[position.lon, position.lat]] };
+    }
+    if (kind === "drive") {
+      const points = this._detail ? routeLngLats(this._detail.route) : [];
+      if (!points.length) {
+        return null;
+      }
+      return { dark, interactive: true, accessToken: token, origin, points };
+    }
+    if (kind === "charge") {
+      const charge = this.selectedCharge();
+      const position = charge ? readPosition(charge.latitude, charge.longitude) : null;
+      if (!position) {
+        return null;
+      }
+      return { dark, interactive: true, accessToken: token, origin, points: [[position.lon, position.lat]] };
+    }
+    return null;
   }
 
   override render() {
@@ -821,10 +962,14 @@ export class TeslaLoggerCard extends LitElement {
           ? html`<section class="place-card">
               <h2 class="visually-hidden">${text.position}</h2>
               <div class="map-frame">
+                ${this.basemapOn() && positioned
+                  ? html`<div class="basemap overview" data-map="overview"></div>`
+                  : nothing}
                 <tl-mini-map
                   class="where"
                   .data=${positionMap(fence ? `${text.position} : ${fence}` : text.unknownPosition, (this.label("activity") || "") === "driving", positioned)}
                 ></tl-mini-map>
+                ${this.basemapOn() && positioned ? html`<p class="map-credit">${BASEMAP_CREDIT}</p>` : nothing}
               </div>
               <div class="place-text">
                 <p class="place-name">${place}</p>
@@ -1219,7 +1364,8 @@ export class TeslaLoggerCard extends LitElement {
     if (!detail) {
       return html`<div class="panel">${this.backButton("drives")}</div>`;
     }
-    const roads = flags.map ? routeRoads(detail.route) : [];
+    const points = flags.map && this.basemapOn() ? routeLngLats(detail.route) : [];
+    const roads = flags.map && !points.length ? routeRoads(detail.route) : [];
     const facts = this.detailDriveFacts(detail);
     return html`
       <div class="panel">
@@ -1228,9 +1374,14 @@ export class TeslaLoggerCard extends LitElement {
           <p class="eyebrow">${formatClock(detail.start_at, this.dates)}</p>
         </div>
         ${flags.map
-          ? roads.length
-            ? html`<tl-mini-map class="route" .data=${routeMap(text.map, roads)}></tl-mini-map>`
-            : html`<p class="message">${text.noGps}</p>`
+          ? points.length
+            ? html`<div class="map-frame detail">
+                <div class="basemap interactive" data-map="drive"></div>
+                <p class="map-credit">${BASEMAP_CREDIT}</p>
+              </div>`
+            : roads.length
+              ? html`<tl-mini-map class="route" .data=${routeMap(text.map, roads)}></tl-mini-map>`
+              : html`<p class="message">${text.noGps}</p>`
           : nothing}
         ${facts.length ? this.summary(facts) : nothing}
         ${this.lineCharts(detail.start_at, detail.series, [
@@ -1305,6 +1456,7 @@ export class TeslaLoggerCard extends LitElement {
           ${this.backButton("charges")}
           <p class="eyebrow">${formatClock(charge.start_at, this.dates)}</p>
         </div>
+        ${this.chargeMap(charge)}
         ${items.length ? this.summary(items) : nothing}
         ${flags.curve
           ? this.lineCharts(charge.start_at, series, [
@@ -1367,6 +1519,16 @@ export class TeslaLoggerCard extends LitElement {
         <span class="back-label">${this.text.back}</span>
       </button>
     `;
+  }
+
+  private chargeMap(charge: Charge) {
+    if (!this.basemapOn() || !readPosition(charge.latitude, charge.longitude)) {
+      return nothing;
+    }
+    return html`<div class="map-frame detail">
+      <div class="basemap interactive" data-map="charge"></div>
+      <p class="map-credit">${BASEMAP_CREDIT}</p>
+    </div>`;
   }
 
   private selectedCharge(): Charge | undefined {

@@ -14,6 +14,7 @@ from .car_image import async_register_car_view
 from .const import CONF_TOKEN, CONF_URL, DOMAIN, PLATFORMS
 from .coordinator import TeslaLoggerConfigEntry, TeslaLoggerHub
 from .frontend import async_register_card
+from .map_tiles import async_register_map_view
 from .services import async_register_services, async_unload_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
     await async_register_card(hass)
     async_register_car_view(hass)
+    async_register_map_view(hass)
     return True
 
 
@@ -34,6 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TeslaLoggerConfigEntry) 
     """Connect to one tesla-logger server."""
     await async_register_card(hass)
     async_register_car_view(hass)
+    async_register_map_view(hass)
     api = TeslaLoggerApi(
         async_get_clientsession(hass),
         entry.data[CONF_URL],
@@ -73,6 +76,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: TeslaLoggerConfigEntry)
             "module_registered",
             "car_view_registered",
             "car_view_listener",
+            "map_view_registered",
+            "map_view_listener",
+            "map_cache",
         }
         if not any(key not in kept for key in store):
             async_unload_services(hass)

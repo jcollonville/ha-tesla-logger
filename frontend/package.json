@@ -1,7 +1,7 @@
 {
   "name": "tesla-logger-card",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "scripts": {
     "verify-ui": "node scripts/verify-ui.mjs",
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@jcollonville/tesla-logger-ui": "file:vendor/jcollonville-tesla-logger-ui-0.1.0.tgz",
-    "lit": "3.2.1"
+    "lit": "3.2.1",
+    "maplibre-gl": "5.24.0"
   },
   "devDependencies": {
     "eslint": "9.16.0",
